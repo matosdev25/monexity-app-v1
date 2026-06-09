@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PLAN_MAP } from "../../../lib/plans/plans";
 import { formatShortDate } from "../../../lib/date-format";
+import { hasValidTrialToday, isTrialEndingToday } from "../../../lib/memberships/app-access";
 import { CancelMembershipButton } from "./cancel-membership-button";
 
 type AccountSectionProps = {
@@ -53,10 +54,8 @@ export function AccountSection({ companyId, canCancel, company, latestPayment }:
     ? STATUS_LABELS[latestPayment.status] ?? latestPayment.status
     : "Sin pago reciente";
   const isCancelled = ["cancelled", "canceled"].includes(status);
-  const hasValidTrial = Boolean(
-    status === "trialing" &&
-    company.trial_ends_at
-  );
+  const hasValidTrial = status === "trialing" && hasValidTrialToday(company.trial_ends_at);
+  const trialEndsToday = status === "trialing" && isTrialEndingToday(company.trial_ends_at);
   const scheduledPlan = company.scheduled_subscription_plan
     ? PLAN_MAP[company.scheduled_subscription_plan]
     : null;
@@ -135,7 +134,16 @@ export function AccountSection({ companyId, canCancel, company, latestPayment }:
 
         {hasValidTrial && plan && (
           <div className="mt-5 rounded-[18px] border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-700 dark:border-cyan-500/25 dark:bg-cyan-500/10 dark:text-cyan-300">
-            Estás en tu prueba gratis. Al finalizar el {formatDate(company.trial_ends_at)}, deberás pagar el plan {plan.name} para continuar usando Monexity.
+            {trialEndsToday ? (
+              <>
+                <p className="font-semibold">Tu prueba gratis termina hoy</p>
+                <p className="mt-1">
+                  Hoy finaliza tu periodo de prueba de Monexity. Realiza el pago de tu plan para seguir disfrutando tus beneficios sin interrupciones.
+                </p>
+              </>
+            ) : (
+              <>Estás en tu prueba gratis. Al finalizar el {formatDate(company.trial_ends_at)}, deberás pagar el plan {plan.name} para continuar usando Monexity.</>
+            )}
           </div>
         )}
 

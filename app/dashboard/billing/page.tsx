@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PLAN_MAP } from "@/lib/plans/plans";
 import { formatShortDate } from "@/lib/date-format";
+import { hasValidTrialToday, isTrialEndingToday } from "@/lib/memberships/app-access";
 import { PaymentFlow } from "./payment-flow";
 
 export const metadata = { title: "Plan y facturación — Monexity" };
@@ -127,7 +128,8 @@ export default async function BillingPage({
   const isPaid = status === "paid";
   const hasPaidAccess = isActive || isPaid;
   const isTrialing = status === "trialing";
-  const hasValidTrial = Boolean(trialEnd && new Date(trialEnd).getTime() > nowTime);
+  const hasValidTrial = isTrialing && hasValidTrialToday(trialEnd);
+  const trialEndsToday = isTrialing && isTrialEndingToday(trialEnd);
   const needsPayment = !hasPaidAccess && !hasValidTrial;
   const currentPlanName = PLAN_LABELS[planId ?? ""] ?? "seleccionado";
   const updatedTrialPlanName = params.trialPlanUpdated
@@ -174,7 +176,16 @@ export default async function BillingPage({
 
       {isTrialing && hasValidTrial && trialEnd && (
         <div className="rounded-[22px] border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-medium leading-6 text-sky-700 dark:border-cyan-500/25 dark:bg-cyan-500/10 dark:text-cyan-300">
-          Estás en tu prueba gratis. Al finalizar el {formatShortDate(trialEnd)}, deberás pagar el plan {currentPlanName} para continuar usando Monexity.
+          {trialEndsToday ? (
+            <>
+              <p className="font-semibold">Tu prueba gratis termina hoy</p>
+              <p className="mt-1 font-normal">
+                Hoy finaliza tu periodo de prueba de Monexity. Realiza el pago de tu plan para seguir disfrutando tus beneficios sin interrupciones.
+              </p>
+            </>
+          ) : (
+            <>Estás en tu prueba gratis. Al finalizar el {formatShortDate(trialEnd)}, deberás pagar el plan {currentPlanName} para continuar usando Monexity.</>
+          )}
         </div>
       )}
 

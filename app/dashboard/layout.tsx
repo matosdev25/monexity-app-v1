@@ -6,6 +6,7 @@ import { DashboardSidebar } from "../../components/dashboard-sidebar";
 import { MobileSidebar } from "../../components/mobile-sidebar";
 import { NavigationProvider, NavigationOverlay } from "@/components/navigation-context";
 import { InactivityLogout } from "@/components/inactivity-logout";
+import { logout } from "@/app/auth/logout/actions";
 import { resolveLogoUrl } from "../../lib/storage/resolve-logo";
 import { isGlobalAdminEmail } from "../../lib/admin-auth";
 import {
@@ -151,6 +152,14 @@ export default async function DashboardLayout({
             <p className="mt-2 text-sm leading-6 text-app-muted">
               La membresía necesita atención. Solo el dueño puede gestionar el plan y los pagos de Monexity.
             </p>
+            <form action={logout} className="mt-5">
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center rounded-full border border-app bg-transparent px-4 py-2 text-sm font-medium text-app-muted transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-app-muted/10 hover:text-app active:scale-[0.98] active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 motion-reduce:transition-none dark:focus-visible:ring-white/20"
+              >
+                Cerrar sesión
+              </button>
+            </form>
           </div>
         </section>
       </main>

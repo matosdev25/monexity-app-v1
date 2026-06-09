@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { CreditCard } from "lucide-react";
 import { PLANS } from "@/lib/plans/plans";
 import { MINIMUM_DISCOUNTED_PAYMENT } from "@/lib/discounts/constants";
 import {
@@ -53,6 +54,30 @@ function formatDate(value: string | null) {
   return formatShortDate(value, "fecha pendiente");
 }
 
+function getYappyPhoneDigits(value: string) {
+  return value.replace(/\D/g, "").slice(0, 8);
+}
+
+function formatYappyPhone(value: string) {
+  const digits = getYappyPhoneDigits(value);
+  if (digits.length <= 4) return digits;
+  return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+}
+
+function getYappyPhoneError(value: string) {
+  const digits = getYappyPhoneDigits(value);
+  if (digits.length > 0 && !digits.startsWith("6")) {
+    return "El número debe empezar por 6.";
+  }
+  if (digits.length > 0 && digits.length < 8) {
+    return "Ingresa un número válido de 8 dígitos.";
+  }
+  if (digits.length === 8 && !/^6\d{7}$/.test(digits)) {
+    return "Ingresa un número válido de 8 dígitos.";
+  }
+  return "";
+}
+
 export function PaymentFlow({
   companyId,
   canManage,
@@ -82,8 +107,26 @@ export function PaymentFlow({
   const [yappySenderName, setYappySenderName] = useState("");
   const [yappySenderPhone, setYappySenderPhone] = useState("");
   const [yappyLoading, setYappyLoading] = useState(false);
+  const [yappyModalOpen, setYappyModalOpen] = useState(false);
+  const [yappyFormError, setYappyFormError] = useState("");
   const [localYappyIntent, setLocalYappyIntent] = useState<IntentData | null>(pendingYappyIntent);
   const [now] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!yappyModalOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setYappyModalOpen(false);
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [yappyModalOpen]);
 
   async function handleCheckout() {
     setLoading(true);
@@ -139,14 +182,21 @@ export function PaymentFlow({
   }
 
   async function handleYappyPayment() {
+    const phoneError = getYappyPhoneError(yappySenderPhone);
+    if (!yappySenderName.trim() || !yappySenderPhone || phoneError) {
+      setYappyFormError(phoneError || "Completa el nombre y número para registrar el pago.");
+      return;
+    }
+
     setYappyLoading(true);
     setError(null);
     setMessage(null);
+    setYappyFormError("");
 
     try {
       const result = await createYappyManualPayment(
         companyId,
-        yappySenderName,
+        yappySenderName.trim(),
         yappySenderPhone,
         discountResult?.ok ? discountResult.code : undefined
       );
@@ -165,6 +215,7 @@ export function PaymentFlow({
         billingCycle: result.intent.billingCycle,
       });
       setMessage(result.message);
+      setYappyModalOpen(false);
     } catch {
       setError("Error de conexión. Intenta nuevamente.");
     } finally {
@@ -212,6 +263,12 @@ export function PaymentFlow({
     localYappyIntent &&
     localYappyIntent.planId === selectedPlan &&
     localYappyIntent.billingCycle === billingCycle
+  );
+  const yappyPhoneError = getYappyPhoneError(yappySenderPhone);
+  const isYappyFormReady = Boolean(
+    yappySenderName.trim() &&
+    yappySenderPhone &&
+    !yappyPhoneError
   );
   const normalizedDiscountCode = discountCode.trim().toUpperCase();
   const showPrimaryAction = needsInitialPayment || isPlanChange;
@@ -409,20 +466,10 @@ export function PaymentFlow({
 
       {!isActive && !hasValidTrial && (
       <div className="rounded-[24px] border border-app bg-app-soft p-4">
-        <div className="mb-4 space-y-2 rounded-[18px] border border-app bg-white/70 p-4 text-sm dark:bg-white/[0.04]">
+        <div className="mb-4 rounded-[18px] border border-app bg-white/70 p-4 text-sm dark:bg-white/[0.04]">
           <div className="flex items-center justify-between gap-3 text-app-muted">
             <span>Plan {selectedPlanConfig?.name ?? "actual"}</span>
             <span className="font-medium text-app">{formatCurrency(baseAmount)}</span>
-          </div>
-          {displayedDiscountAmount > 0 && (
-            <div className="flex items-center justify-between gap-3 text-emerald-600 dark:text-emerald-300">
-              <span>Descuento</span>
-              <span>-{formatCurrency(displayedDiscountAmount)}</span>
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-3 border-t border-app pt-2 font-semibold text-app">
-            <span>Total</span>
-            <span>{formatCurrency(displayedFinalAmount)}</span>
           </div>
         </div>
 
@@ -481,6 +528,19 @@ export function PaymentFlow({
             {discountResult?.message ?? "El código no es válido."}
           </p>
         )}
+
+        <div className="mt-4 space-y-2 rounded-[18px] border border-app bg-white/70 p-4 text-sm dark:bg-white/[0.04]">
+          {displayedDiscountAmount > 0 && (
+            <div className="flex items-center justify-between gap-3 text-emerald-600 dark:text-emerald-300">
+              <span>Descuento</span>
+              <span>-{formatCurrency(displayedDiscountAmount)}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-3 border-t border-app pt-2 font-semibold text-app">
+            <span>Total</span>
+            <span>{formatCurrency(displayedFinalAmount)}</span>
+          </div>
+        </div>
       </div>
       )}
 
@@ -504,62 +564,155 @@ export function PaymentFlow({
 
       {showPrimaryAction && (
         <div className="space-y-3">
-          <button
-            type="button"
-            onClick={handleCheckout}
-            disabled={loading || !canManage || hasCheckoutMinimumIssue}
-            className="w-full rounded-[22px] bg-sky-600 py-3.5 text-sm font-semibold text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
-          >
-            {loading ? "Procesando..." : buttonLabel}
-          </button>
-
-          {needsInitialPayment && (
-            <div className="rounded-[24px] border border-app bg-app-soft p-4">
-              <div className="flex flex-col gap-1">
-                <p className="text-sm font-semibold text-app">Pagar por Yappy</p>
-                <p className="text-xs leading-5 text-app-soft">
-                  Envía el pago por Yappy al 6601-7105.
-                </p>
-              </div>
-
-              <div className="mt-3 grid gap-2">
-                <input
-                  type="text"
-                  value={yappySenderName}
-                  onChange={(event) => setYappySenderName(event.target.value)}
-                  placeholder="Nombre de quien enviará el Yappy"
-                  disabled={Boolean(localYappyIntent) || yappyLoading}
-                  className="rounded-[18px] border border-app bg-white px-4 py-3 text-sm text-app outline-none transition-[background-color,border-color,box-shadow,opacity] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] placeholder:text-app-soft disabled:cursor-not-allowed disabled:opacity-60 focus:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-400/30 dark:bg-white/[0.06]"
-                />
-                <input
-                  type="tel"
-                  value={yappySenderPhone}
-                  onChange={(event) => setYappySenderPhone(event.target.value)}
-                  placeholder="Número desde donde se enviará"
-                  disabled={Boolean(localYappyIntent) || yappyLoading}
-                  className="rounded-[18px] border border-app bg-white px-4 py-3 text-sm text-app outline-none transition-[background-color,border-color,box-shadow,opacity] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] placeholder:text-app-soft disabled:cursor-not-allowed disabled:opacity-60 focus:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-400/30 dark:bg-white/[0.06]"
-                />
-              </div>
+          {needsInitialPayment ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={handleCheckout}
+                disabled={loading || !canManage || hasCheckoutMinimumIssue}
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[22px] bg-sky-600 px-4 py-3.5 text-sm font-semibold text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 motion-reduce:transition-none dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
+              >
+                <CreditCard className="h-4 w-4" aria-hidden="true" />
+                {loading ? "Procesando..." : "Pagar con tarjeta"}
+              </button>
 
               <button
                 type="button"
-                onClick={handleYappyPayment}
+                onClick={() => {
+                  setYappyFormError("");
+                  setYappyModalOpen(true);
+                }}
                 disabled={
                   yappyLoading ||
                   !canManage ||
                   hasCheckoutMinimumIssue ||
                   Boolean(localYappyIntent)
                 }
-                className="mt-3 w-full rounded-[20px] border border-sky-300 bg-white px-4 py-3 text-sm font-semibold text-sky-700 transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 dark:border-cyan-500/30 dark:bg-white/[0.04] dark:text-cyan-300 dark:hover:bg-cyan-500/10"
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[22px] border border-sky-300 bg-white px-4 py-3.5 text-sm font-semibold text-sky-700 transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 motion-reduce:transition-none dark:border-cyan-500/30 dark:bg-white/[0.04] dark:text-cyan-300 dark:hover:bg-cyan-500/10"
               >
-                {localYappyIntent
-                  ? "Pago pendiente de revisión"
-                  : yappyLoading
-                    ? "Registrando..."
-                    : "Registrar pago por Yappy"}
+                <span
+                  aria-hidden="true"
+                  className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-sky-700 dark:bg-cyan-500/15 dark:text-cyan-200"
+                >
+                  Yappy
+                </span>
+                {localYappyIntent ? "Pago pendiente" : "Pagar por Yappy"}
               </button>
             </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleCheckout}
+              disabled={loading || !canManage || hasCheckoutMinimumIssue}
+              className="w-full rounded-[22px] bg-sky-600 py-3.5 text-sm font-semibold text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 motion-reduce:transition-none dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
+            >
+              {loading ? "Procesando..." : buttonLabel}
+            </button>
           )}
+        </div>
+      )}
+
+      {yappyModalOpen && (
+        <div className="fixed inset-0 z-[1000]">
+          <button
+            type="button"
+            aria-label="Cerrar modal"
+            className="absolute inset-0 bg-slate-950/45 dark:bg-black/60"
+            onClick={() => setYappyModalOpen(false)}
+          />
+          <div className="absolute inset-0 overflow-y-auto overscroll-contain p-4">
+            <div className="flex min-h-full items-center justify-center">
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="yappy-payment-title"
+                className="relative my-4 w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-5 text-app shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-950 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-soft">
+                      Facturación
+                    </p>
+                    <h2
+                      id="yappy-payment-title"
+                      className="mt-1 text-xl font-semibold tracking-tight text-app"
+                    >
+                      Pago por Yappy
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setYappyModalOpen(false)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-app text-app-muted transition-[background-color,border-color,color,opacity] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-app-soft hover:text-app active:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/40 motion-reduce:transition-none"
+                    aria-label="Cerrar"
+                  >
+                    x
+                  </button>
+                </div>
+
+                <div className="mt-4 rounded-[20px] border border-sky-200 bg-sky-100 p-4 text-sm leading-6 text-sky-800 dark:border-cyan-500/35 dark:bg-cyan-950/80 dark:text-cyan-100">
+                  <p>Envía el pago por Yappy al 6601-7105.</p>
+                  <p className="mt-1 font-semibold">
+                    Monto a pagar: {formatCurrency(displayedFinalAmount)}
+                  </p>
+                </div>
+
+                <div className="mt-4 grid gap-2">
+                  <input
+                    type="text"
+                    value={yappySenderName}
+                    onChange={(event) => {
+                      setYappySenderName(event.target.value);
+                      setYappyFormError("");
+                    }}
+                    placeholder="Nombre de quien enviará el Yappy"
+                    disabled={Boolean(localYappyIntent) || yappyLoading}
+                    className="rounded-[18px] border border-app bg-white px-4 py-3 text-sm text-app outline-none transition-[background-color,border-color,box-shadow,opacity] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] placeholder:text-app-soft disabled:cursor-not-allowed disabled:opacity-60 focus:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-400/30 motion-reduce:transition-none dark:bg-white/[0.06]"
+                  />
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="6[0-9]{3}-[0-9]{4}"
+                    maxLength={9}
+                    value={yappySenderPhone}
+                    onChange={(event) => {
+                      setYappySenderPhone(formatYappyPhone(event.target.value));
+                      setYappyFormError("");
+                    }}
+                    placeholder="6000-0000"
+                    disabled={Boolean(localYappyIntent) || yappyLoading}
+                    aria-invalid={Boolean(yappyPhoneError || yappyFormError)}
+                    className="rounded-[18px] border border-app bg-white px-4 py-3 text-sm text-app outline-none transition-[background-color,border-color,box-shadow,opacity] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] placeholder:text-app-soft disabled:cursor-not-allowed disabled:opacity-60 focus:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-400/30 motion-reduce:transition-none dark:bg-white/[0.06]"
+                  />
+                </div>
+
+                {(yappyPhoneError || yappyFormError) && (
+                  <p className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                    {yappyFormError || yappyPhoneError}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleYappyPayment}
+                  disabled={
+                    yappyLoading ||
+                    !canManage ||
+                    hasCheckoutMinimumIssue ||
+                    Boolean(localYappyIntent) ||
+                    !isYappyFormReady
+                  }
+                  className="mt-4 w-full rounded-[20px] bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 motion-reduce:transition-none dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
+                >
+                  {localYappyIntent
+                    ? "Pago pendiente de revisión"
+                    : yappyLoading
+                      ? "Registrando..."
+                      : "Registrar pago por Yappy"}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

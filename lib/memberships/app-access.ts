@@ -13,15 +13,50 @@ export type AppAccessCompany = {
   is_blocked: boolean | null;
 };
 
+const APP_TIME_ZONE = "America/Panama";
+
+function getDateKeyInAppTimeZone(value: Date | string | number) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
+export function hasValidTrialToday(trialEndsAt: string | null) {
+  if (!trialEndsAt) return false;
+
+  const trialEndDate = getDateKeyInAppTimeZone(trialEndsAt);
+  const today = getDateKeyInAppTimeZone(new Date());
+
+  return Boolean(trialEndDate && today && trialEndDate >= today);
+}
+
+export function isTrialEndingToday(trialEndsAt: string | null) {
+  if (!trialEndsAt) return false;
+
+  const trialEndDate = getDateKeyInAppTimeZone(trialEndsAt);
+  const today = getDateKeyInAppTimeZone(new Date());
+
+  return Boolean(trialEndDate && today && trialEndDate === today);
+}
+
 export function canAccessCompanyApp(company: AppAccessCompany) {
   if (company.is_blocked || !company.subscription_plan) return false;
 
   const status = String(company.subscription_status ?? "").toLowerCase();
   if (status === "trialing") {
-    return Boolean(
-      company.trial_ends_at &&
-      new Date(company.trial_ends_at).getTime() > Date.now()
-    );
+    return hasValidTrialToday(company.trial_ends_at);
   }
 
   if (["active", "paid"].includes(status)) {
