@@ -1,0 +1,366 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    color-scheme: light;
+
+    --bg-start: 250 250 251;
+    --bg-mid: 243 245 247;
+    --bg-end: 233 237 242;
+
+    --surface-panel: rgba(255, 255, 255, 0.58);
+    --surface-card: rgba(255, 255, 255, 0.72);
+    --surface-card-strong: rgba(255, 255, 255, 0.82);
+    --surface-soft: rgba(248, 250, 252, 0.72);
+    --surface-hover: rgba(255, 255, 255, 0.9);
+
+    --border-soft: rgba(148, 163, 184, 0.20);
+    --border-strong: rgba(148, 163, 184, 0.32);
+
+    --text-primary: #0f172a;
+    --text-muted: #475569;
+    --text-soft: #94a3b8;
+
+    --brand: #0369a1;
+    --brand-soft: #7dd3fc;
+
+    --shadow-panel: 0 14px 40px rgba(15, 23, 42, 0.06);
+    --shadow-card: 0 10px 28px rgba(15, 23, 42, 0.05);
+    --shadow-soft: 0 6px 18px rgba(15, 23, 42, 0.035);
+  }
+
+  .dark {
+    color-scheme: dark;
+
+    --bg-start: 2 6 23;
+    --bg-mid: 8 15 31;
+    --bg-end: 15 23 42;
+
+    --surface-panel: rgba(15, 23, 42, 0.78);
+    --surface-card: rgba(15, 23, 42, 0.88);
+    --surface-card-strong: rgba(30, 41, 59, 0.92);
+    --surface-soft: rgba(30, 41, 59, 0.52);
+    --surface-hover: rgba(30, 41, 59, 0.96);
+
+    --border-soft: rgba(148, 163, 184, 0.12);
+    --border-strong: rgba(148, 163, 184, 0.2);
+
+    --text-primary: #f8fafc;
+    --text-muted: #cbd5e1;
+    --text-soft: #94a3b8;
+
+    --brand: #7dd3fc;
+    --brand-soft: #bae6fd;
+
+    --shadow-panel: 0 18px 42px rgba(2, 6, 23, 0.34);
+    --shadow-card: 0 10px 28px rgba(2, 6, 23, 0.24);
+    --shadow-soft: 0 6px 20px rgba(2, 6, 23, 0.18);
+  }
+
+  * {
+    border-color: var(--border-soft);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  select,
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  html {
+    min-height: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    min-height: 100vh;
+    color: var(--text-primary);
+    background:
+      radial-gradient(
+        circle at top left,
+        rgba(255, 255, 255, 0.72),
+        rgba(255, 255, 255, 0) 18%
+      ),
+      linear-gradient(
+        180deg,
+        rgb(var(--bg-start)) 0%,
+        rgb(var(--bg-mid)) 48%,
+        rgb(var(--bg-end)) 100%
+      );
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .dark body {
+    background:
+      radial-gradient(
+        circle at top left,
+        rgba(56, 189, 248, 0.08),
+        rgba(56, 189, 248, 0) 22%
+      ),
+      radial-gradient(
+        circle at top right,
+        rgba(59, 130, 246, 0.06),
+        rgba(59, 130, 246, 0) 18%
+      ),
+      linear-gradient(
+        180deg,
+        rgb(var(--bg-start)) 0%,
+        rgb(var(--bg-mid)) 50%,
+        rgb(var(--bg-end)) 100%
+      );
+  }
+
+  ::selection {
+    background: rgba(56, 189, 248, 0.22);
+    color: var(--text-primary);
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.36);
+    border-radius: 9999px;
+  }
+
+  .dark *::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.5);
+  }
+}
+
+@layer components {
+  .section-label {
+    @apply text-sm font-medium;
+    color: var(--brand);
+  }
+
+  .app-panel {
+    background: var(--surface-panel);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-panel);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .app-card {
+    background: var(--surface-card);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .app-card-strong {
+    background: var(--surface-card-strong);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  .app-card-interactive {
+    background: var(--surface-card);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    cursor: pointer;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      transform 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  .app-card-interactive:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+  }
+
+  .app-button-soft {
+    @apply inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-medium transition-colors duration-150;
+    background: var(--surface-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    cursor: pointer;
+  }
+
+  .app-button-soft:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+  }
+}
+
+@layer utilities {
+  .text-app {
+    color: var(--text-primary);
+  }
+
+  .text-app-muted {
+    color: var(--text-muted);
+  }
+
+  .text-app-soft {
+    color: var(--text-soft);
+  }
+
+  .bg-app-soft {
+    background: var(--surface-soft);
+  }
+
+  .border-app {
+    border-color: var(--border-soft);
+  }
+
+  .border-app-strong {
+    border-color: var(--border-strong);
+  }
+
+  .animate-mx-fade-up {
+    animation: mx-fade-up 0.22s ease-out both;
+  }
+
+  .animate-mx-scale-in {
+    animation: mx-scale-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-mx-fade-in {
+    animation: mx-fade-in 0.18s ease both;
+  }
+
+  .animate-mx-scale-out {
+    animation: mx-scale-out 0.15s cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  .mx-loader {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    display: inline-block;
+  }
+
+  .mx-loader::before,
+  .mx-loader::after {
+    content: "";
+    display: block;
+    position: absolute;
+    border-style: solid;
+    border-radius: 50%;
+    border-top-color: transparent;
+    border-left-color: transparent;
+  }
+
+  .mx-loader::before {
+    width: 56px;
+    height: 56px;
+    border-width: 3px;
+    border-right-color: var(--brand);
+    border-bottom-color: var(--brand);
+    animation: mx-spin-cw 1s linear infinite;
+  }
+
+  .mx-loader::after {
+    width: 32px;
+    height: 32px;
+    top: 12px;
+    left: 12px;
+    border-width: 2.5px;
+    border-right-color: var(--brand-soft);
+    border-bottom-color: var(--brand-soft);
+    animation: mx-spin-ccw 0.85s linear infinite;
+  }
+}
+
+/* ─── Keyframes ─────────────────────────────────────────────────────────────── */
+
+@keyframes mx-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mx-scale-in {
+  from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes mx-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes mx-scale-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.95) translateY(-4px); }
+}
+
+@keyframes mx-spin-cw {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes mx-spin-ccw {
+  to { transform: rotate(-360deg); }
+}
+
+/* ─── Pressed states para cards interactivas y botones base ─────────────────── */
+
+@layer components {
+  .app-card-interactive:active {
+    transform: scale(0.99);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .app-button-soft:active {
+    transform: scale(0.97);
+    opacity: 0.88;
+  }
+}
+
+/* ─── Reduced motion ────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-mx-fade-up,
+  .animate-mx-scale-in,
+  .animate-mx-fade-in {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .animate-mx-scale-out {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  .mx-loader::before,
+  .mx-loader::after {
+    animation: none !important;
+    opacity: 0.4;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
