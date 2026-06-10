@@ -3,6 +3,7 @@ import Image from "next/image";
 type Props = {
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
+  label?: string;
 };
 
 const SIZES = {
@@ -12,7 +13,7 @@ const SIZES = {
   xl: { mark: 52, text: "text-[28px]", gap: "gap-3" },
 };
 
-export function MonexityLogo({ size = "md", className }: Props) {
+export function MonexityLogo({ size = "md", className, label = "Monexity" }: Props) {
   const { mark, text, gap } = SIZES[size];
   return (
     <div className={["flex items-center", gap, className].join(" ")}>
@@ -38,7 +39,7 @@ export function MonexityLogo({ size = "md", className }: Props) {
           "font-semibold tracking-[-0.022em] text-slate-900 dark:text-white",
         ].join(" ")}
       >
-        Monexity
+        {label}
       </span>
     </div>
   );
