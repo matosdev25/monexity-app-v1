@@ -1,18 +1,34 @@
 import Link from "next/link";
 import { MonexityLogo } from "@/components/monexity-logo";
+import { PricingPlansSection } from "@/components/pricing-plans-section";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { WaitlistForm } from "@/components/waitlist-form";
+import { PLANS as PRODUCT_PLANS } from "@/lib/plans/plans";
 
-// Fuerza renderizado dinámico para que WAITLIST_MODE se lea por request
 export const dynamic = "force-dynamic";
 
-// ── Waitlist mode flag ────────────────────────────────────────────────────────
-// Activar: WAITLIST_MODE=true en .env.local | Desactivar: eliminar o =false
-const WL = process.env.WAITLIST_MODE === "true";
-const SIGNUP_HREF = WL ? "#waitlist" : "/auth/sign-up";
-const LOGIN_HREF = WL ? "#waitlist" : "/auth/login";
+const SIGNUP_HREF = "/auth/sign-up";
+const LOGIN_HREF = "/auth/login";
+const WHATSAPP_NUMBER = "50761912312";
+const WHATSAPP_TEXT = "Hola, quiero más información sobre MONEXITY.";
+const WHATSAPP_HREF = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+  WHATSAPP_TEXT
+)}`;
 
-// ── Icons ─────────────────────────────────────────────────────────────────────
+function IconArrow() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" aria-hidden="true">
+      <path d="M3 8H13M9 4L13 8L9 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconChevronDown() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 shrink-0 transition-transform duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true">
+      <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function IconSales() {
   return (
@@ -34,13 +50,22 @@ function IconExpenses() {
   );
 }
 
-function IconClosure() {
+function IconQuote() {
   return (
     <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-      <rect x="4" y="5" width="16" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M8 3V6M16 3V6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M4 10H20" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M9 15L11 17L15.5 12.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 4H6C4.9 4 4 4.9 4 6V18C4 19.1 4.9 20 6 20H18C19.1 20 20 19.1 20 18V6C20 4.9 19.1 4 18 4H16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M8 4C8 3.45 8.45 3 9 3H15C15.55 3 16 3.45 16 4V5C16 5.55 15.55 6 15 6H9C8.45 6 8 5.55 8 5V4Z" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8 11H16M8 15H13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconBox() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+      <path d="M4 7.5C4 6.67 4.67 6 5.5 6H18.5C19.33 6 20 6.67 20 7.5V9H4V7.5Z" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M4 9H20V18.5C20 19.33 19.33 20 18.5 20H5.5C4.67 20 4 19.33 4 18.5V9Z" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M9 13H15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
 }
@@ -56,333 +81,134 @@ function IconTeam() {
   );
 }
 
-function IconBusiness() {
+function IconSummary() {
   return (
     <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-      <path d="M5 19V8.5C5 7.67 5.67 7 6.5 7H10V5.5C10 4.67 10.67 4 11.5 4H17.5C18.33 4 19 4.67 19 5.5V19" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M4 19H20" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M8 11H8.01M8 14.5H8.01M13 8.5H13.01M16 8.5H16.01M13 12H13.01M16 12H16.01" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M5 19V5M5 19H20" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M9 15L12 12L14.5 13.8L19 8.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 18V15M12 18V12M15 18V14M18 18V9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
 }
 
-function IconInventory() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-      <path d="M4 7.5C4 6.67 4.67 6 5.5 6H18.5C19.33 6 20 6.67 20 7.5V9H4V7.5Z" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M4 9H20V18.5C20 19.33 19.33 20 18.5 20H5.5C4.67 20 4 19.33 4 18.5V9Z" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M9 13H15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconUser() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-      <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M5.5 20C6.5 17.1 9.04 16 12 16C14.96 16 17.5 17.1 18.5 20" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconCheck() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true">
-      <path d="M3 8.5L6 11.5L13 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconMinus() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 shrink-0 text-slate-300 dark:text-slate-600" aria-hidden="true">
-      <path d="M4 8H12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconArrow() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" aria-hidden="true">
-      <path d="M3 8H13M9 4L13 8L9 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconChevronDown() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4 shrink-0 transition-transform duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true">
-      <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-// ── Data ──────────────────────────────────────────────────────────────────────
-
-const TRUST_ITEMS = [
-  "Sin tarjeta de crédito",
-  "7 días gratis",
-  "Pago con Yappy (Próximamente)",
-  "Cancela cuando quieras",
-  "Datos seguros",
-];
-
-const STEPS = [
-  {
-    number: "01",
-    Icon: IconUser,
-    color: "text-sky-600 bg-sky-50 dark:text-sky-300 dark:bg-sky-500/10",
-    title: "Crea tu cuenta en 2 minutos",
-    description:
-      "Sin tarjeta, sin configuración complicada. Solo tu email y el nombre de tu negocio.",
-  },
-  {
-    number: "02",
-    Icon: IconSales,
-    color: "text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/10",
-    title: "Registra ventas y gastos",
-    description:
-      "Desde el celular, al instante. Efectivo, Yappy (Próximamente), tarjeta o transferencia — como cobra Panamá.",
-  },
-  {
-    number: "03",
-    Icon: IconClosure,
-    color: "text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10",
-    title: "Cierra el mes y conoce tus números",
-    description:
-      "Con un clic ves cuánto vendiste, cuánto gastaste y cuánto te quedó. Sin calculadora.",
-  },
+const PAIN_POINTS = [
+  "No sabes exactamente cuánto vendiste.",
+  "Todo depende de Excel, libretas o memoria.",
+  "Pierdes cotizaciones o pedidos.",
+  "No tienes claro cuánto te queda.",
+  "Se te olvidan gastos pequeños.",
 ];
 
 const FEATURES = [
   {
     Icon: IconSales,
     title: "Ventas",
-    description:
-      "Registra cada venta en segundos. Efectivo, tarjeta, Yappy (Próximamente) o transferencia — como funciona en Panamá.",
+    description: "Registra lo que vendes cada día y mantén un historial claro.",
     color: "text-sky-600 bg-sky-50 dark:text-sky-300 dark:bg-sky-500/10",
   },
   {
     Icon: IconExpenses,
     title: "Gastos",
-    description:
-      "Control de gastos por categoría: inventario, transporte, planilla, alquiler. Con estado y proveedor.",
+    description: "Anota compras, pagos y costos para saber en qué se va el dinero.",
     color: "text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/10",
   },
   {
-    Icon: IconClosure,
-    title: "Cierre del período",
-    description:
-      "Resumen financiero completo al cerrar el mes. Lo que vendiste, lo que gastaste y cuánto te quedó.",
+    Icon: IconQuote,
+    title: "Cotizaciones",
+    description: "Envía propuestas más ordenadas y profesionales a tus clientes.",
     color: "text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10",
   },
   {
-    Icon: IconInventory,
-    title: "Inventario",
-    description:
-      "Productos, stock y movimientos. Sabe cuándo se te acaba algo antes de que el cliente te lo diga.",
+    Icon: IconBox,
+    title: "Productos o servicios",
+    description: "Organiza lo que vendes, tus precios y detalles importantes.",
     color: "text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/10",
   },
   {
     Icon: IconTeam,
-    title: "Equipo y roles",
-    description:
-      "Dueño, administrador, vendedor. Cada quien ve y hace lo que le corresponde, nada más.",
+    title: "Equipo",
+    description: "Agrega vendedores o ayudantes para trabajar con más orden.",
     color: "text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/10",
   },
   {
-    Icon: IconBusiness,
-    title: "Tu negocio",
-    description:
-      "Configura tu negocio: nombre, logo, métodos de pago aceptados y todo lo que lo identifica.",
+    Icon: IconSummary,
+    title: "Resumen del negocio",
+    description: "Mira cuánto entra, cuánto sale y cuánto te queda.",
     color: "text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-500/10",
   },
 ];
 
-const PLANS = [
-  {
-    id: "emprende",
-    name: "Emprende",
-    tagline: "Para servicios sin inventario",
-    price: "$ 3.99",
-    annual: "$ 39.99/año",
-    savings: "Ahorra $ 7.89",
-    highlighted: false,
-    features: [
-      { label: "Ventas y gastos ilimitados", included: true },
-      { label: "Cierre del período", included: true },
-      { label: "1 usuario", included: true },
-      { label: "Descarga y comparte facturas en PDF.", included: true },
-      { label: "Inventario de productos", included: false },
-      { label: "Equipo con múltiples usuarios", included: false },
-    ],
-  },
-  {
-    id: "control",
-    name: "Control",
-    tagline: "Para negocios con productos",
-    price: "$ 8.99",
-    annual: "$ 89.99/año",
-    savings: "Ahorra $ 17.89",
-    highlighted: true,
-    features: [
-      { label: "Ventas y gastos ilimitados", included: true },
-      { label: "Cierre del período", included: true },
-      { label: "1 usuario", included: true },
-      { label: "Descarga y comparte facturas en PDF.", included: true },
-      { label: "Inventario de productos", included: true },
-      { label: "Equipo con múltiples usuarios", included: false },
-    ],
-  },
-  {
-    id: "equipo",
-    name: "Equipo",
-    tagline: "Para negocios con vendedores",
-    price: "$ 14.99",
-    annual: "$ 149.99/año",
-    savings: "Ahorra $ 29.89",
-    highlighted: false,
-    features: [
-      { label: "Ventas y gastos ilimitados", included: true },
-      { label: "Cierre del período", included: true },
-      { label: "Usuarios ilimitados", included: true },
-      { label: "Descarga y comparte facturas en PDF.", included: true },
-      { label: "Inventario de productos", included: true },
-      { label: "Roles: dueño, administrador, vendedor", included: true },
-    ],
-  },
-];
-
-const TESTIMONIALS = [
-  {
-    quote:
-      "Antes cerraba el mes en una planilla que siempre me daba diferente. Ahora lo hago en 5 minutos desde el teléfono.",
-    name: "Pedro M.",
-    business: "Tienda de ropa · Ciudad de Panamá",
-    initial: "P",
-    color: "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300",
-  },
-  {
-    quote:
-      "Lo que más me convenció fue que se podrá pagar con Yappy (Próximamente). Sin tarjeta, sin complicaciones. Y funciona exactamente como lo necesito.",
-    name: "Ana R.",
-    business: "Restaurante familiar · La Chorrera",
-    initial: "A",
-    color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
-  },
-  {
-    quote:
-      "Tengo tres vendedores y cada uno registra sus ventas. Yo veo todo desde mi teléfono sin tener que preguntar nada.",
-    name: "Carlos S.",
-    business: "Distribuidora · Chitré",
-    initial: "C",
-    color: "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300",
-  },
+const BUSINESS_TYPES = [
+  "Barberías",
+  "Salones de uñas",
+  "Negocios de belleza",
+  "Tiendas pequeñas",
+  "Revendedores",
+  "Food trucks",
+  "Freelancers",
+  "Servicios profesionales",
+  "Emprendedores",
 ];
 
 const FAQS = [
   {
-    q: "¿Necesito tarjeta de crédito para empezar?",
-    a: "No. Los 7 días de prueba son completamente gratis y no requieren ningún dato de pago. Solo creas tu cuenta y empiezas.",
+    q: "¿Necesito saber contabilidad?",
+    a: "No. MONEXITY está pensado para dueños de negocio que quieren orden sin aprender términos complicados.",
   },
   {
-    q: "¿Cómo pago cuando termine el período de prueba?",
-    a: "Yappy (Próximamente) será una opción de pago. Por ahora verás las opciones disponibles dentro de la app.",
+    q: "¿Puedo usarlo desde el celular?",
+    a: "Sí. Funciona desde el navegador de tu celular, sin descargar una app.",
   },
   {
-    q: "¿Puedo usar Monexity desde el celular?",
-    a: "Sí, está diseñado mobile first. Funciona desde el navegador de tu celular sin necesidad de descargar ninguna aplicación.",
+    q: "¿La prueba gratis tiene compromiso?",
+    a: "No. Puedes probar MONEXITY gratis por 7 días y decidir después si quieres continuar.",
   },
   {
-    q: "¿Qué pasa si tengo más de un negocio?",
-    a: "Puedes crear y manejar múltiples negocios desde una sola cuenta. Cada negocio es completamente independiente con sus propios datos.",
+    q: "¿Puedo pagar por Yappy?",
+    a: "Sí. Puedes pagar tu suscripción mensual por Yappy. El pago se revisa y se activa desde MONEXITY.",
   },
   {
-    q: "¿Puedo cambiar de plan después?",
-    a: "Sí. Puedes subir o bajar de plan cuando quieras. El cambio aplica al siguiente período de facturación.",
+    q: "¿Para qué tipo de negocios funciona?",
+    a: "Funciona para servicios, tiendas, belleza, comida, freelancers y negocios pequeños que venden y gastan todos los días.",
   },
   {
-    q: "¿Mis datos están seguros?",
-    a: "Sí. Los datos se almacenan con cifrado y control de acceso individual por usuario y negocio. Nadie puede ver tu información sin que tú lo autorices.",
+    q: "¿MONEXITY reemplaza a un contador?",
+    a: "No. Te ayuda a tener tus números diarios más claros. Para temas fiscales o contables, siempre conviene apoyarte con un profesional.",
+  },
+  {
+    q: "¿Puedo pedir ayuda por WhatsApp?",
+    a: "Sí. Puedes escribirnos por WhatsApp y te orientamos para empezar.",
   },
 ];
 
-// ── Landing ───────────────────────────────────────────────────────────────────
-
 export default function LandingPage() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-20 sm:pb-0">
       <LandingHeader />
       <main>
         <HeroSection />
-        <TrustStripSection />
-        <HowItWorksSection />
+        <ProblemSection />
+        <SolutionSection />
         <FeaturesSection />
+        <AudienceSection />
         <PricingSection />
-        <TestimonialsSection />
         <FAQSection />
-        <PersonalSection />
-        {WL && <WaitlistSection />}
-        <AboutSection />
-        <ContactSection />
         <FinalCTASection />
       </main>
+      <MobileStickyCTA />
       <LandingFooter />
     </div>
   );
 }
 
-// ── Waitlist ──────────────────────────────────────────────────────────────────
-
-function WaitlistSection() {
-  return (
-    <section
-      id="waitlist"
-      className="border-t border-slate-200/60 px-4 py-20 sm:py-28 dark:border-slate-800/60"
-      aria-labelledby="waitlist-heading"
-    >
-      <div className="mx-auto max-w-md">
-        <div className="mb-6 flex justify-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1.5 text-sm font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
-            <svg viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
-              <path d="M8 1.5a.75.75 0 0 1 .692.46l1.261 2.927 3.155.461a.75.75 0 0 1 .416 1.279l-2.284 2.226.539 3.143a.75.75 0 0 1-1.088.79L8 10.933l-2.691 1.853a.75.75 0 0 1-1.088-.79l.539-3.143L2.476 6.627a.75.75 0 0 1 .416-1.279l3.155-.461L7.308 1.96A.75.75 0 0 1 8 1.5Z" />
-            </svg>
-            25% de descuento al lanzamiento
-          </span>
-        </div>
-
-        <div className="text-center">
-          <h2
-            id="waitlist-heading"
-            className="text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white"
-          >
-            Sé de los primeros
-            <br />
-            en usar Monexity.
-          </h2>
-          <p className="mx-auto mt-4 max-w-sm text-slate-500 dark:text-slate-400">
-            Únete a la lista de espera y recibe un <strong className="font-semibold text-slate-700 dark:text-slate-300">25% de descuento</strong> en cualquier plan cuando abramos acceso.
-          </p>
-        </div>
-
-        <div className="mt-8 rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_2px_24px_rgba(15,23,42,0.07)] dark:border-slate-800 dark:bg-slate-900 dark:shadow-[0_2px_24px_rgba(2,6,23,0.24)]">
-          <WaitlistForm />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── Header ────────────────────────────────────────────────────────────────────
-
 function LandingHeader() {
   return (
     <header
-      className="sticky top-0 z-50 w-full border-b border-slate-200/60 bg-white/80 dark:border-slate-800/60 dark:bg-slate-950/80"
+      className="sticky top-0 z-50 w-full border-b border-slate-200/60 bg-white/82 dark:border-slate-800/60 dark:bg-slate-950/82"
       style={{ WebkitBackdropFilter: "blur(20px)", backdropFilter: "blur(20px)" }}
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6 sm:grid sm:grid-cols-[1fr_auto_1fr]">
-        <MonexityLogo size="sm" />
+        <MonexityLogo size="sm" label="MONEXITY" />
 
         <nav className="hidden items-center gap-6 sm:flex" aria-label="Navegación principal">
           {[
@@ -401,19 +227,17 @@ function LandingHeader() {
         </nav>
 
         <div className="flex items-center justify-end gap-2">
-          {!WL && (
-            <Link
-              href={LOGIN_HREF}
-              className="hidden rounded-[14px] px-4 py-2 text-sm font-medium text-slate-600 transition-[background-color,color] duration-180 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 active:scale-95 sm:block dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
-            >
-              Iniciar sesión
-            </Link>
-          )}
+          <Link
+            href={LOGIN_HREF}
+            className="hidden rounded-[14px] px-4 py-2 text-sm font-medium text-slate-600 transition-[background-color,color] duration-180 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-95 sm:block dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+          >
+            Iniciar sesión
+          </Link>
           <Link
             href={SIGNUP_HREF}
             className="rounded-[14px] bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-[background-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-95 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
           >
-            {WL ? "Unirse a la lista" : "Empezar gratis"}
+            Probar gratis
           </Link>
           <ThemeToggle compact />
         </div>
@@ -422,136 +246,144 @@ function LandingHeader() {
   );
 }
 
-// ── 1. Hero ───────────────────────────────────────────────────────────────────
-
 function HeroSection() {
   return (
-    <section
-      className="relative overflow-hidden px-4 pb-16 pt-20 text-center sm:pb-20 sm:pt-28"
-      aria-labelledby="hero-heading"
-    >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 flex justify-center"
-      >
-        <div className="h-120 w-225 rounded-full bg-sky-100/40 blur-3xl dark:bg-sky-500/5" />
+    <section className="relative overflow-hidden px-4 pb-16 pt-14 sm:pb-20 sm:pt-20" aria-labelledby="hero-heading">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 flex justify-center">
+        <div className="h-96 w-[46rem] rounded-full bg-sky-100/55 blur-3xl dark:bg-sky-500/7" />
       </div>
 
-      <div className="relative mx-auto max-w-3xl">
-        <span className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
-          <span className="h-1.5 w-1.5 rounded-full bg-sky-500" aria-hidden="true" />
-          Monexity · Negocios
-        </span>
+      <div className="relative mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[1.02fr_0.98fr]">
+        <div className="text-center lg:text-left">
+          <span className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-sky-500" aria-hidden="true" />
+            Para pequeños negocios en Panamá
+          </span>
 
-        <h1
-          id="hero-heading"
-          className="mt-6 text-balance text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl lg:text-[3.5rem] lg:leading-[1.1] dark:text-white"
-        >
-          Controla tus ventas, gastos{" "}
-          <br className="hidden sm:block" />
-          y cierre en un solo lugar.
-        </h1>
+          <h1 id="hero-heading" className="mt-6 text-balance text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl lg:text-[3.55rem] lg:leading-[1.05] dark:text-white">
+            Controla tu negocio desde el celular
+          </h1>
 
-        <p className="mx-auto mt-5 max-w-xl text-balance text-lg leading-relaxed text-slate-500 dark:text-slate-400">
-          Para pequeños negocios en Panamá. Sin planillas, sin cálculos manuales, sin perder el control de tu dinero.
-        </p>
+          <p className="mx-auto mt-5 max-w-2xl text-balance text-lg leading-relaxed text-slate-500 lg:mx-0 dark:text-slate-400">
+            Registra ventas, gastos, cotizaciones y productos para saber cuánto entra, cuánto sale y cuánto te queda. Sin Excel, sin libretas y sin enredos.
+          </p>
 
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link
-            href={SIGNUP_HREF}
-            className="inline-flex h-12 items-center gap-2 rounded-[18px] bg-slate-900 px-6 text-sm font-semibold text-white transition-[background-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-          >
-            {WL ? "Unirme a la lista — 25% off" : "Empezar gratis — 7 días"}
-            <IconArrow />
-          </Link>
-          <a
-            href={WL ? "#waitlist" : "#planes"}
-            className="inline-flex h-12 items-center rounded-[18px] border border-slate-200 bg-white px-6 text-sm font-medium text-slate-700 transition-[background-color,border-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800"
-          >
-            {WL ? "Ver beneficios" : "Ver planes"}
-          </a>
+          <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row lg:justify-start">
+            <Link
+              href={SIGNUP_HREF}
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-[18px] bg-slate-900 px-6 text-sm font-semibold text-white transition-[background-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+            >
+              Probar gratis 7 días
+              <IconArrow />
+            </Link>
+            <a
+              href={WHATSAPP_HREF}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-12 items-center justify-center rounded-[18px] border border-slate-200 bg-white px-6 text-sm font-medium text-slate-700 transition-[background-color,border-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+            >
+              Hablar por WhatsApp
+            </a>
+          </div>
+
+          <p className="mt-4 text-sm text-slate-400 dark:text-slate-500">
+            Sin compromiso. Planes desde $3.99/mes. Pago por Yappy disponible.
+          </p>
         </div>
+
+        <BusinessMockup />
       </div>
     </section>
   );
 }
 
-// ── 2. Trust strip ────────────────────────────────────────────────────────────
-
-function TrustStripSection() {
+function BusinessMockup() {
   return (
-    <div className="border-y border-slate-200/60 bg-white/60 dark:border-slate-800/60 dark:bg-slate-900/40">
-      <div className="mx-auto max-w-6xl overflow-x-auto px-4">
-        <ul className="flex min-w-max items-center justify-center gap-0 sm:min-w-0">
-          {TRUST_ITEMS.map((item, i) => (
-            <li
-              key={item}
-              className={[
-                "flex items-center gap-2 px-5 py-3.5 text-sm text-slate-500 dark:text-slate-400",
-                i < TRUST_ITEMS.length - 1
-                  ? "border-r border-slate-200/60 dark:border-slate-700/60"
-                  : "",
-              ].join(" ")}
-            >
-              <span
-                className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
-                aria-hidden="true"
-              />
-              {item}
-            </li>
-          ))}
-        </ul>
+    <div className="mx-auto w-full max-w-md lg:max-w-none">
+      <div className="rounded-[32px] border border-slate-200/70 bg-white p-4 shadow-[0_18px_60px_rgba(15,23,42,0.12)] dark:border-slate-800 dark:bg-slate-900 dark:shadow-[0_24px_70px_rgba(2,6,23,0.40)]">
+        <div className="rounded-[26px] border border-slate-200/70 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-600 dark:text-sky-400">
+                Resumen del negocio
+              </p>
+              <p className="mt-1 text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
+                Junio
+              </p>
+            </div>
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+              Al día
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            {[
+              { label: "Ventas del mes", value: "$ 2,840.00", tone: "text-emerald-600 dark:text-emerald-300" },
+              { label: "Gastos", value: "$ 970.00", tone: "text-rose-600 dark:text-rose-300" },
+              { label: "Te queda", value: "$ 1,870.00", tone: "text-sky-600 dark:text-sky-300" },
+            ].map((item) => (
+              <div key={item.label} className="rounded-[22px] border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-sm text-slate-500 dark:text-slate-400">{item.label}</p>
+                <p className={`mt-1 text-2xl font-bold tracking-tight ${item.tone}`}>
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 rounded-[22px] border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Últimas ventas</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Hoy</p>
+            </div>
+            <div className="space-y-2">
+              {[
+                ["Corte + barba", "$ 18.00"],
+                ["Producto vendido", "$ 12.50"],
+                ["Servicio completo", "$ 35.00"],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
+                  <span className="text-sm text-slate-600 dark:text-slate-300">{label}</span>
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── 3. Cómo funciona ──────────────────────────────────────────────────────────
-
-function HowItWorksSection() {
+function ProblemSection() {
   return (
-    <section
-      className="px-4 py-20 sm:py-24"
-      aria-labelledby="how-heading"
-    >
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-12 text-center">
+    <section className="px-4 py-16 sm:py-20" aria-labelledby="problem-heading">
+      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">
-            Cómo funciona
+            EL PROBLEMA
           </p>
-          <h2
-            id="how-heading"
-            className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white"
-          >
-            En tres pasos tienes{" "}
-            <br className="hidden sm:block" />
-            tu negocio bajo control.
+          <h2 id="problem-heading" className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white">
+            ¿Todavía manejas tu negocio con libretas, Excel o notas de WhatsApp?
           </h2>
+          <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-500 dark:text-slate-400">
+            Cuando las ventas, gastos y cotizaciones están regadas, es difícil saber cómo va realmente tu negocio.
+          </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          {STEPS.map(({ number, Icon, color, title, description }) => (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {PAIN_POINTS.map((item, index) => (
             <div
-              key={number}
-              className="relative rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_2px_12px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900"
+              key={item}
+              className={[
+                "rounded-[24px] border border-slate-200/70 bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900",
+                index === PAIN_POINTS.length - 1 ? "sm:col-span-2 sm:w-[calc(50%-0.375rem)] sm:justify-self-center" : "",
+              ].join(" ")}
             >
-              <span className="absolute right-5 top-5 font-mono text-3xl font-bold text-slate-100 dark:text-slate-800">
-                {number}
-              </span>
-              <div
-                className={[
-                  "mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl",
-                  color,
-                ].join(" ")}
-              >
-                <Icon />
+              <div className="flex items-start gap-3">
+                <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-rose-400" aria-hidden="true" />
+                <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">{item}</p>
               </div>
-              <h3 className="font-semibold tracking-tight text-slate-900 dark:text-white">
-                {title}
-              </h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                {description}
-              </p>
             </div>
           ))}
         </div>
@@ -560,53 +392,52 @@ function HowItWorksSection() {
   );
 }
 
-// ── 4. Funcionalidades ────────────────────────────────────────────────────────
+function SolutionSection() {
+  return (
+    <section className="border-y border-slate-200/60 bg-white/55 px-4 py-16 dark:border-slate-800/60 dark:bg-slate-900/35" aria-labelledby="solution-heading">
+      <div className="mx-auto max-w-3xl text-center">
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">
+          La solución
+        </p>
+        <h2 id="solution-heading" className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white">
+          MONEXITY pone tus números en orden de forma simple.
+        </h2>
+        <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-500 dark:text-slate-400">
+          Registra lo importante de tu negocio desde el celular y revisa tu información en un solo lugar. No necesitas ser contador ni usar sistemas complicados.
+        </p>
+        <Link
+          href={SIGNUP_HREF}
+          className="mt-7 inline-flex h-11 items-center justify-center gap-2 rounded-[16px] bg-slate-900 px-5 text-sm font-semibold text-white transition-[background-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+        >
+          Empezar gratis
+          <IconArrow />
+        </Link>
+      </div>
+    </section>
+  );
+}
 
 function FeaturesSection() {
   return (
-    <section
-      id="funciones"
-      className="px-4 py-20 sm:py-24"
-      aria-labelledby="features-heading"
-    >
+    <section id="funciones" className="px-4 py-16 sm:py-20" aria-labelledby="features-heading">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-12 text-center">
+        <div className="mb-10 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">
-            Funcionalidades
+            Lo que puedes hacer
           </p>
-          <h2
-            id="features-heading"
-            className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white"
-          >
-            Todo lo que necesita{" "}
-            <br className="hidden sm:block" />
-            tu negocio hoy.
+          <h2 id="features-heading" className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white">
+            Todo lo básico para entender mejor tu negocio.
           </h2>
-          <p className="mx-auto mt-4 max-w-lg text-slate-500 dark:text-slate-400">
-            Sin módulos que no usas. Sin configuraciones complejas. Solo lo esencial, funcionando desde el día uno.
-          </p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map(({ Icon, title, description, color }) => (
-            <div
-              key={title}
-              className="rounded-3xl border border-slate-200/70 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.05)] transition-[border-color,box-shadow,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_6px_24px_rgba(15,23,42,0.09)] motion-reduce:transition-none dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
-            >
-              <div
-                className={[
-                  "mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl",
-                  color,
-                ].join(" ")}
-              >
+            <div key={title} className="rounded-[24px] border border-slate-200/70 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900">
+              <div className={["mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl", color].join(" ")}>
                 <Icon />
               </div>
-              <h3 className="font-semibold tracking-tight text-slate-900 dark:text-white">
-                {title}
-              </h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                {description}
-              </p>
+              <h3 className="font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</p>
             </div>
           ))}
         </div>
@@ -615,215 +446,78 @@ function FeaturesSection() {
   );
 }
 
-// ── 5. Pricing ────────────────────────────────────────────────────────────────
-
-function PricingSection() {
+function AudienceSection() {
   return (
-    <section
-      id="planes"
-      className="px-4 py-20 sm:py-24"
-      aria-labelledby="pricing-heading"
-    >
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-12 text-center">
+    <section className="px-4 py-16 sm:py-20" aria-labelledby="audience-heading">
+      <div className="mx-auto max-w-5xl rounded-[28px] border border-slate-200/70 bg-white p-6 shadow-[0_2px_16px_rgba(15,23,42,0.06)] sm:p-8 dark:border-slate-800 dark:bg-slate-900">
+        <div className="text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">
-            Planes
+            Para quién es
           </p>
-          <h2
-            id="pricing-heading"
-            className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white"
-          >
-            Un precio justo para{" "}
-            <br className="hidden sm:block" />
-            cada tipo de negocio.
+          <h2 id="audience-heading" className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white">
+            Hecho para pequeños negocios que quieren orden sin complicarse.
           </h2>
-          <p className="mx-auto mt-4 max-w-lg text-slate-500 dark:text-slate-400">
-            Prueba Monexity gratis por 7 días. Al finalizar, podrás continuar pagando tu plan mensual o anual.
-          </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          {PLANS.map((plan) => (
-            <div
-              key={plan.id}
-              className={[
-                "relative flex flex-col rounded-[28px] p-6",
-                plan.highlighted
-                  ? "border-2 border-sky-500 bg-white shadow-[0_8px_40px_rgba(14,165,233,0.16)] dark:border-sky-400 dark:bg-slate-900"
-                  : "border border-slate-200/80 bg-white shadow-[0_2px_16px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900",
-              ].join(" ")}
-            >
-              {plan.highlighted && (
-                <div className="absolute -top-3.5 left-0 right-0 flex justify-center">
-                  <span className="rounded-full bg-sky-500 px-4 py-1 text-xs font-semibold text-white shadow-sm dark:bg-sky-400 dark:text-slate-900">
-                    Más popular
-                  </span>
-                </div>
-              )}
-
-              <div>
-                <p className="font-semibold tracking-tight text-slate-900 dark:text-white">
-                  {plan.name}
-                </p>
-                <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                  {plan.tagline}
-                </p>
-                <div className="mt-5 flex items-end gap-1">
-                  <span className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white">
-                    {plan.price}
-                  </span>
-                  <span className="mb-1 text-sm text-slate-400">/mes</span>
-                </div>
-                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                  {plan.annual} ·{" "}
-                  <span className="text-emerald-600 dark:text-emerald-400">{plan.savings}</span>{" "}
-                  al pagar anual
-                </p>
-              </div>
-
-              <ul className="mt-6 flex-1 space-y-2.5">
-                {plan.features.map(({ label, included }) => (
-                  <li key={label} className="flex items-start gap-2.5">
-                    {included ? <IconCheck /> : <IconMinus />}
-                    <span
-                      className={[
-                        "text-sm",
-                        included
-                          ? "text-slate-700 dark:text-slate-300"
-                          : "text-slate-300 dark:text-slate-600",
-                      ].join(" ")}
-                    >
-                      {label}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                href={SIGNUP_HREF}
-                className={[
-                  "mt-8 inline-flex h-11 w-full items-center justify-center rounded-[18px] text-sm font-semibold transition-[background-color,border-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98]",
-                  plan.highlighted
-                    ? "bg-sky-600 text-white hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-400"
-                    : "border border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:hover:border-slate-600",
-                ].join(" ")}
-              >
-                {WL ? "Reservar mi lugar →" : "Empezar gratis"}
-              </Link>
-            </div>
+        <div className="mt-8 flex flex-wrap justify-center gap-2.5">
+          {BUSINESS_TYPES.map((item) => (
+            <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              {item}
+            </span>
           ))}
         </div>
 
-        <p className="mt-8 text-center text-sm text-slate-400 dark:text-slate-500">
-          ¿No sabes cuál elegir? Empieza con{" "}
-          <span className="font-medium text-slate-600 dark:text-slate-300">Emprende</span>{" "}
-          y cambia cuando lo necesites.
+        <p className="mx-auto mt-7 max-w-2xl text-center text-base leading-relaxed text-slate-500 dark:text-slate-400">
+          Si vendes, gastas y necesitas saber mejor cómo va tu negocio, MONEXITY es para ti.
         </p>
       </div>
     </section>
   );
 }
 
-// ── 6. Testimonios ────────────────────────────────────────────────────────────
-
-function TestimonialsSection() {
+function PricingSection() {
   return (
-    <section
-      className="px-4 py-20 sm:py-24"
-      aria-labelledby="testimonials-heading"
-    >
+    <section id="planes" className="px-4 py-16 sm:py-20" aria-labelledby="pricing-heading">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-12 text-center">
+        <div className="mb-10 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">
-            Testimonios
+            Planes
           </p>
-          <h2
-            id="testimonials-heading"
-            className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white"
-          >
-            Lo que dicen los primeros{" "}
-            <br className="hidden sm:block" />
-            negocios en usarlo.
+          <h2 id="pricing-heading" className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white">
+            Planes simples para ordenar tu negocio
           </h2>
+          <p className="mx-auto mt-4 max-w-lg text-slate-500 dark:text-slate-400">
+            Puedes empezar con 7 días gratis y pagar tu suscripción mensual por Yappy.
+          </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          {TESTIMONIALS.map(({ quote, name, business, initial, color }) => (
-            <figure
-              key={name}
-              className="flex flex-col rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_2px_12px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900"
-            >
-              <svg
-                viewBox="0 0 24 16"
-                fill="currentColor"
-                className="mb-4 h-5 w-7 text-slate-200 dark:text-slate-700"
-                aria-hidden="true"
-              >
-                <path d="M0 16V9.455C0 4.09 3.27 1.09 9.818 0l1.09 1.818C8.09 2.545 6.546 4 6 6.545h3.818V16H0Zm12.727 0V9.455C12.727 4.09 16 1.09 22.545 0l1.091 1.818c-2.818.727-4.363 2.182-4.909 4.727H22.545V16H12.727Z" />
-              </svg>
-              <blockquote className="flex-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                {quote}
-              </blockquote>
-              <figcaption className="mt-5 flex items-center gap-3">
-                <span
-                  className={[
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
-                    color,
-                  ].join(" ")}
-                  aria-hidden="true"
-                >
-                  {initial}
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white">{name}</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{business}</p>
-                </div>
-              </figcaption>
-            </figure>
-          ))}
-        </div>
+        <PricingPlansSection plans={PRODUCT_PLANS} signupHref={SIGNUP_HREF} />
       </div>
     </section>
   );
 }
 
-// ── 7. FAQ ────────────────────────────────────────────────────────────────────
-
 function FAQSection() {
   return (
-    <section
-      id="faq"
-      className="px-4 py-20 sm:py-24"
-      aria-labelledby="faq-heading"
-    >
+    <section id="faq" className="px-4 py-16 sm:py-20" aria-labelledby="faq-heading">
       <div className="mx-auto max-w-2xl">
         <div className="mb-10 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">
             Preguntas frecuentes
           </p>
-          <h2
-            id="faq-heading"
-            className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white"
-          >
-            Todo lo que quieres saber{" "}
-            <br className="hidden sm:block" />
-            antes de empezar.
+          <h2 id="faq-heading" className="mt-3 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white">
+            Lo básico antes de empezar.
           </h2>
         </div>
 
-        <div className="divide-y divide-slate-200/60 rounded-3xl border border-slate-200/70 bg-white shadow-[0_2px_16px_rgba(15,23,42,0.05)] dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+        <div className="divide-y divide-slate-200/60 rounded-[28px] border border-slate-200/70 bg-white shadow-[0_2px_16px_rgba(15,23,42,0.05)] dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
           {FAQS.map(({ q, a }) => (
-            <details
-              key={q}
-              className="group px-6 py-0"
-            >
+            <details key={q} className="group px-6 py-0">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-medium text-slate-900 [&::-webkit-details-marker]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 dark:text-white">
                 {q}
                 <IconChevronDown />
               </summary>
-              <p className="pb-4 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                {a}
-              </p>
+              <p className="pb-4 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{a}</p>
             </details>
           ))}
         </div>
@@ -832,197 +526,74 @@ function FAQSection() {
   );
 }
 
-// ── 8. Monexity Personal — próximamente ───────────────────────────────────────
-
-function PersonalSection() {
-  return (
-    <section
-      className="px-4 py-20 sm:py-24"
-      aria-labelledby="personal-heading"
-    >
-      <div className="mx-auto max-w-5xl">
-        <div className="relative overflow-hidden rounded-4xl border border-slate-200/50 bg-linear-to-br from-slate-50 to-slate-100/60 p-8 sm:p-12 dark:border-slate-800 dark:from-slate-900 dark:to-slate-800/60">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute right-0 top-0 h-72 w-72 rounded-full bg-violet-100/60 blur-3xl dark:bg-violet-500/5"
-          />
-
-          <div className="relative">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300">
-                Muy pronto
-              </span>
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                Monexity · Personal
-              </span>
-            </div>
-
-            <h2
-              id="personal-heading"
-              className="mt-5 text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl dark:text-white"
-            >
-              Finanzas personales,
-              <br />
-              tan claras como las de tu negocio.
-            </h2>
-
-            <p className="mt-4 max-w-lg text-slate-500 dark:text-slate-400">
-              Próximamente: control de gastos personales, ahorro y presupuesto mensual. Para la misma persona que controla su negocio con Monexity.
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              {["Gastos del hogar", "Ahorro mensual", "Presupuesto", "Metas financieras"].map(
-                (item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-slate-200 bg-white/80 px-3.5 py-1.5 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-400"
-                  >
-                    {item}
-                  </span>
-                )
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── 9. Sobre Monexity ─────────────────────────────────────────────────────────
-
-function AboutSection() {
-  return (
-    <section
-      id="sobre"
-      className="border-t border-slate-200/60 px-4 py-20 sm:py-28 dark:border-slate-800/60"
-      aria-labelledby="about-heading"
-    >
-      <div className="mx-auto max-w-3xl text-center">
-        <p className="text-sm font-semibold uppercase tracking-widest text-sky-600 dark:text-sky-400">
-          Sobre Monexity
-        </p>
-        <h2
-          id="about-heading"
-          className="mt-4 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white"
-        >
-          Hecho en Panamá, para negocios panameños.
-        </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-500 dark:text-slate-400">
-          Monexity nació de una necesidad real: los pequeños negocios en Panamá no tenían una herramienta financiera diseñada para ellos. Las opciones existentes eran demasiado complejas, demasiado caras o simplemente no encajaban con la forma en que funcionan los negocios locales.
-        </p>
-        <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-500 dark:text-slate-400">
-          Construimos Monexity para el dueño de tienda que lleva las cuentas desde el celular, para el equipo pequeño que necesita orden sin procesos complicados, y para quien quiere tomar decisiones con números reales, no con suposiciones.
-        </p>
-        <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-500 dark:text-slate-400">
-          Simple, rápido y pensado para Panamá.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-// ── 10. Contacto ──────────────────────────────────────────────────────────────
-
-function ContactSection() {
-  return (
-    <section
-      id="contacto"
-      className="border-t border-slate-200/60 px-4 py-20 sm:py-28 dark:border-slate-800/60"
-      aria-labelledby="contact-heading"
-    >
-      <div className="mx-auto max-w-xl text-center">
-        <p className="text-sm font-semibold uppercase tracking-widest text-sky-600 dark:text-sky-400">
-          Contáctanos
-        </p>
-        <h2
-          id="contact-heading"
-          className="mt-4 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white"
-        >
-          ¿Tienes preguntas?
-        </h2>
-        <p className="mt-5 text-slate-500 dark:text-slate-400">
-          Escríbenos directamente. Respondemos en menos de 24 horas, de lunes a viernes.
-        </p>
-        <a
-          href="mailto:admin@monexity-app.com"
-          className="mt-8 inline-flex h-12 items-center gap-2.5 rounded-[18px] bg-slate-900 px-7 text-sm font-semibold text-white transition-[background-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-        >
-          <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 shrink-0" aria-hidden="true">
-            <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.7" />
-            <path d="M3 8.5L10.5 13.5C11.38 14.05 12.62 14.05 13.5 13.5L21 8.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-          </svg>
-          admin@monexity-app.com
-        </a>
-        <p className="mt-5 text-xs text-slate-400 dark:text-slate-600">
-          También puedes escribirnos para soporte, colaboraciones o prensa.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-// ── 11. CTA final ─────────────────────────────────────────────────────────────
-
 function FinalCTASection() {
   return (
-    <section
-      className="px-4 py-20 sm:py-28"
-      aria-labelledby="cta-heading"
-    >
+    <section className="px-4 py-16 sm:py-24" aria-labelledby="cta-heading">
       <div className="mx-auto max-w-2xl text-center">
-        <h2
-          id="cta-heading"
-          className="text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white"
-        >
-          Tu negocio merece más
-          <br />
-          que una hoja de cálculo.
+        <h2 id="cta-heading" className="text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl dark:text-white">
+          Deja de adivinar cómo va tu negocio.
         </h2>
         <p className="mx-auto mt-5 max-w-lg text-slate-500 dark:text-slate-400">
-          Prueba Monexity gratis por 7 días. Al finalizar, podrás continuar pagando tu plan mensual o anual.
+          Prueba MONEXITY gratis por 7 días y empieza a ver tus ventas, gastos y ganancias con más claridad.
         </p>
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row">
           <Link
             href={SIGNUP_HREF}
-            className="inline-flex h-12 items-center gap-2 rounded-[18px] bg-slate-900 px-7 text-sm font-semibold text-white transition-[background-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-[18px] bg-slate-900 px-7 text-sm font-semibold text-white transition-[background-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
           >
-            {WL ? "Reservar mi 25% de descuento" : "Empezar gratis — 7 días"}
+            Probar gratis 7 días
             <IconArrow />
           </Link>
-          {!WL && (
-            <Link
-              href={LOGIN_HREF}
-              className="inline-flex h-12 items-center rounded-[18px] px-6 text-sm font-medium text-slate-500 transition-colors duration-180 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-slate-400 dark:hover:text-white"
-            >
-              Ya tengo cuenta →
-            </Link>
-          )}
+          <a
+            href={WHATSAPP_HREF}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-12 items-center justify-center rounded-[18px] border border-slate-200 bg-white px-6 text-sm font-medium text-slate-700 transition-[background-color,border-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+          >
+            Hablar por WhatsApp
+          </a>
         </div>
       </div>
     </section>
   );
 }
 
-// ── Footer ────────────────────────────────────────────────────────────────────
+function MobileStickyCTA() {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200/70 bg-white/90 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:hidden dark:border-slate-800/70 dark:bg-slate-950/90">
+      <div className="mx-auto grid max-w-md grid-cols-[1fr_auto] gap-2">
+        <Link
+          href={SIGNUP_HREF}
+          className="inline-flex h-11 items-center justify-center rounded-[16px] bg-slate-900 px-4 text-sm font-semibold text-white transition-[background-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+        >
+          Probar gratis
+        </Link>
+        <a
+          href={WHATSAPP_HREF}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-11 items-center justify-center rounded-[16px] border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-[background-color,border-color,transform] duration-180 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-[0.98] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600"
+        >
+          WhatsApp
+        </a>
+      </div>
+    </div>
+  );
+}
 
 function LandingFooter() {
   return (
     <footer className="border-t border-slate-200/60 dark:border-slate-800/60">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 sm:flex-row">
-        <MonexityLogo size="sm" />
+        <MonexityLogo size="sm" label="MONEXITY" />
 
-        <nav
-          className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2"
-          aria-label="Footer"
-        >
+        <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2" aria-label="Footer">
           {[
             { label: "Funciones", href: "#funciones" },
             { label: "Planes", href: "#planes" },
             { label: "FAQ", href: "#faq" },
-            { label: "Sobre Monexity", href: "#sobre" },
-            { label: "Contacto", href: "#contacto" },
-            { label: "Iniciar sesión", href: "/auth/login" },
+            { label: "WhatsApp", href: WHATSAPP_HREF },
+            { label: "Iniciar sesión", href: LOGIN_HREF },
           ].map(({ label, href }) => (
             <a
               key={label}
@@ -1035,7 +606,7 @@ function LandingFooter() {
         </nav>
 
         <p className="text-xs text-slate-400 dark:text-slate-600">
-          © {new Date().getFullYear()} Monexity · Panamá
+          © {new Date().getFullYear()} MONEXITY · Panamá
         </p>
       </div>
     </footer>
