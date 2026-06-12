@@ -293,6 +293,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
       ...sale,
       paid_amount: summary.collectedAmount,
       balance_due: summary.pendingBalance,
+      initial_down_payment: downPaymentTotals.get(sale.id) ?? 0,
       payment_status:
         summary.pendingBalance <= 0
           ? "paid"

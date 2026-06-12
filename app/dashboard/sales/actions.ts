@@ -1191,7 +1191,60 @@ export async function updateSale(
       return fail("Las ventas a cuota deben conservar el tipo de pago cuotas.");
     }
 
-    const noteValue = note || invoiceNotes || null;
+    const fallbackAmount = parseMoney(amountRaw);
+    const fallbackDescription = invoiceNotes || note || "Venta registrada";
+    const parsedItems = parseInvoiceItems(
+      formData,
+      fallbackAmount,
+      fallbackDescription
+    );
+
+    if ("error" in parsedItems) {
+      return fail(parsedItems.error);
+    }
+
+    const subtotal = parsedItems.subtotal;
+    const discountAmountRaw = getString(formData, "discountAmount");
+    const discountAmount = Math.max(0, roundMoney(parseMoney(discountAmountRaw)));
+    if (discountAmount > 0 && discountAmount >= subtotal) {
+      return fail("El descuento debe ser menor al total.");
+    }
+
+    const finalAmount = discountAmount > 0 ? roundMoney(subtotal - discountAmount) : subtotal;
+    const downPaymentAmount = roundMoney(parseMoney(getStringFromKeys(formData, ["paidAmount"])));
+
+    if (!Number.isFinite(downPaymentAmount) || downPaymentAmount < 0) {
+      return fail("El abono inicial no es válido.");
+    }
+
+    if (downPaymentAmount > finalAmount) {
+      return fail("El abono inicial no puede ser mayor al total.");
+    }
+
+    const { data: existingPayments, error: paymentsError } = await context.supabase
+      .from("sale_payments")
+      .select("amount")
+      .eq("sale_id", saleId)
+      .eq("company_id", context.companyId);
+
+    if (paymentsError) {
+      return fail(paymentsError.message || "No se pudieron validar los pagos registrados.");
+    }
+
+    const laterPaymentsAmount = roundMoney(
+      (existingPayments ?? []).reduce(
+        (sum: number, payment: { amount: unknown }) =>
+          sum + Number(payment.amount ?? 0),
+        0
+      )
+    );
+    const totalCollected = roundMoney(downPaymentAmount + laterPaymentsAmount);
+
+    if (finalAmount < totalCollected) {
+      return fail("El total de la venta no puede ser menor que el monto ya cobrado.");
+    }
+
+    const noteValue = note || invoiceNotes || parsedItems.items[0]?.description || null;
     const { data: updatedSale, error: updateSaleError } = await context.supabase
       .from("sales")
       .update({
@@ -1199,6 +1252,8 @@ export async function updateSale(
         customer_company: customerCompany || null,
         customer_email: customerEmail || null,
         customer_phone: customerPhone || null,
+        amount: finalAmount,
+        discount_amount: discountAmount,
         payment_method: paymentMethod,
         sale_date: saleDate,
         payment_date: paymentDate || null,
@@ -1218,6 +1273,31 @@ export async function updateSale(
       return fail("No se encontró la venta a editar.");
     }
 
+    const { error: updatePlanError } = await context.supabase
+      .from("sale_payment_plans")
+      .update({ down_payment_amount: downPaymentAmount })
+      .eq("sale_id", saleId)
+      .eq("company_id", context.companyId);
+
+    if (updatePlanError) {
+      return fail(updatePlanError.message || "No se pudo actualizar el abono inicial.");
+    }
+
+    const { error: replaceItemsError } = await replaceSaleItems({
+      supabase: context.supabase,
+      saleId,
+      companyId: context.companyId,
+      items: parsedItems.items,
+    });
+
+    if (replaceItemsError) {
+      return fail(
+        replaceItemsError.message ||
+          "No se pudieron actualizar los ítems de la factura."
+      );
+    }
+
+    await recalcSaleTotals(context.supabase, saleId, context.companyId);
     revalidateSalesPages();
     return ok("Venta actualizada correctamente.");
   }

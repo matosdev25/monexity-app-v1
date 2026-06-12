@@ -146,11 +146,14 @@ export function EditSaleForm({
 
   const initialPaidAmount = useMemo(() => {
     const salePaymentType = String(sale.payment_type ?? "").toLowerCase();
+    if (salePaymentType === "installment") {
+      return String(roundMoney(parseMoney(sale.initial_down_payment)));
+    }
     if (salePaymentType === "full") {
       return String(roundMoney(parseMoney(sale.amount)));
     }
     return String(roundMoney(parseMoney(sale.paid_amount)));
-  }, [sale.payment_type, sale.paid_amount, sale.amount]);
+  }, [sale.payment_type, sale.initial_down_payment, sale.paid_amount, sale.amount]);
 
   const [rawAmount, setRawAmount] = useState(initialAmount);
   const [rawDiscount, setRawDiscount] = useState(
@@ -327,12 +330,7 @@ export function EditSaleForm({
               const normalized = normalizeAmountInput(e.target.value);
               setRawAmount(normalized);
             }}
-            readOnly={isInstallmentSale}
-            className={`${inputClass} ${
-              isInstallmentSale
-                ? "cursor-not-allowed bg-slate-50 text-slate-500 dark:bg-slate-900 dark:text-slate-400"
-                : ""
-            }`}
+            className={inputClass}
             placeholder="$ 0.00"
           />
           {!isInstallmentSale ? <input type="hidden" name="amount" value={rawAmount} /> : null}
@@ -360,12 +358,7 @@ export function EditSaleForm({
             inputMode="decimal"
             value={rawDiscount ? formatAmountInput(rawDiscount) : ""}
             onChange={(e) => setRawDiscount(normalizeAmountInput(e.target.value))}
-            readOnly={isInstallmentSale}
-            className={`${inputClass} ${
-              isInstallmentSale
-                ? "cursor-not-allowed bg-slate-50 text-slate-500 dark:bg-slate-900 dark:text-slate-400"
-                : ""
-            }`}
+            className={inputClass}
             placeholder="$ 0.00"
           />
         </div>
@@ -429,9 +422,9 @@ export function EditSaleForm({
               const normalized = normalizeAmountInput(e.target.value);
               setRawPaidAmount(normalized);
             }}
-            disabled={paymentType === "full" || isInstallmentSale}
+            disabled={paymentType === "full"}
             className={`${inputClass} ${
-              paymentType === "full" || isInstallmentSale
+              paymentType === "full"
                 ? "cursor-not-allowed bg-slate-50 text-slate-500 dark:bg-slate-900 dark:text-slate-400"
                 : ""
             }`}

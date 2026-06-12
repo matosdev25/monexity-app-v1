@@ -34,6 +34,7 @@ export type Sale = {
   payment_type: PaymentType | string | null;
   payment_status: SalePaymentStatus | string | null;
   has_payment_plan: boolean | null;
+  initial_down_payment?: MoneyValue;
   note: Nullable<string>;
   invoice_notes: Nullable<string>;
   sale_date: ISODateString;
