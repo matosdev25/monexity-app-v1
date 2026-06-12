@@ -5,10 +5,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { validateDiscountCodeForAmount } from "@/lib/discounts/validate-discount-code";
 import { getPlanAmount } from "@/lib/paguelofacil";
 import { PLAN_MAP } from "@/lib/plans/plans";
-import {
-  MINIMUM_DISCOUNTED_PAYMENT,
-  MINIMUM_DISCOUNTED_PAYMENT_MESSAGE,
-} from "@/lib/discounts/constants";
 
 type BillingCycle = "monthly" | "annual";
 type SubscriptionActionResult = { success: boolean; error?: string };
@@ -255,10 +251,6 @@ export async function createYappyManualPayment(
     appliedDiscountCode = validation.code;
     discountAmount = validation.discountAmount;
     exactAmount = validation.finalAmount;
-
-    if (exactAmount < MINIMUM_DISCOUNTED_PAYMENT) {
-      return { success: false, error: MINIMUM_DISCOUNTED_PAYMENT_MESSAGE };
-    }
   }
 
   const { data: existingIntent } = await admin

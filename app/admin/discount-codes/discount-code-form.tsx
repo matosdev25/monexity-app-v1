@@ -21,7 +21,7 @@ export function DiscountCodeForm() {
       <div>
         <p className="text-lg font-semibold text-app">Crear código</p>
         <p className="mt-1 text-sm text-app-muted">
-          Los códigos se validan en servidor. El total final nunca puede ser menor a $ 1.50.
+          Los códigos se validan en servidor. El total final debe ser mayor a $0.00.
         </p>
       </div>
 

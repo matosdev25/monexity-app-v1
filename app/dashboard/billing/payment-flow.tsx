@@ -3,7 +3,6 @@
 import { useEffect, useState, useTransition } from "react";
 import { CreditCard } from "lucide-react";
 import { PLANS } from "@/lib/plans/plans";
-import { MINIMUM_DISCOUNTED_PAYMENT } from "@/lib/discounts/constants";
 import {
   cancelScheduledSubscriptionChange,
   createYappyManualPayment,
@@ -298,7 +297,7 @@ export function PaymentFlow({
     : 0;
   const displayedDiscountAmount = discountResult?.ok ? discountResult.discountAmount : 0;
   const displayedFinalAmount = discountResult?.ok ? discountResult.finalAmount : baseAmount;
-  const hasCheckoutMinimumIssue = displayedFinalAmount < MINIMUM_DISCOUNTED_PAYMENT;
+  const hasInvalidCheckoutAmount = displayedFinalAmount <= 0;
   const buttonLabel = isPlanChange
     ? hasValidTrial
       ? "Cambiar ahora"
@@ -548,12 +547,6 @@ export function PaymentFlow({
           </p>
         )}
 
-        {discountResult?.ok && discountResult.finalAmount < MINIMUM_DISCOUNTED_PAYMENT && (
-          <p className="mt-2 text-xs text-amber-600 dark:text-amber-300">
-            Este código supera el descuento permitido. El mínimo a pagar es {formatCurrency(MINIMUM_DISCOUNTED_PAYMENT)}.
-          </p>
-        )}
-
         {discountStatus === "invalid" && (
           <p className="mt-2 text-xs text-amber-600 dark:text-amber-300">
             {discountResult?.message ?? "El código no es válido."}
@@ -600,7 +593,7 @@ export function PaymentFlow({
               <button
                 type="button"
                 onClick={handleCheckout}
-                disabled={loading || !canManage || hasCheckoutMinimumIssue}
+                disabled={loading || !canManage || hasInvalidCheckoutAmount}
                 className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[22px] bg-sky-600 px-4 py-3.5 text-sm font-semibold text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 motion-reduce:transition-none dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
               >
                 <CreditCard className="h-4 w-4" aria-hidden="true" />
@@ -616,7 +609,7 @@ export function PaymentFlow({
                 disabled={
                   yappyLoading ||
                   !canManage ||
-                  hasCheckoutMinimumIssue ||
+                  hasInvalidCheckoutAmount ||
                   Boolean(localYappyIntent)
                 }
                 className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[22px] border border-sky-300 bg-white px-4 py-3.5 text-sm font-semibold text-sky-700 transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 motion-reduce:transition-none dark:border-cyan-500/30 dark:bg-white/[0.04] dark:text-cyan-300 dark:hover:bg-cyan-500/10"
@@ -634,7 +627,7 @@ export function PaymentFlow({
             <button
               type="button"
               onClick={handleCheckout}
-              disabled={loading || !canManage || hasCheckoutMinimumIssue}
+              disabled={loading || !canManage || hasInvalidCheckoutAmount}
               className="w-full rounded-[22px] bg-sky-600 py-3.5 text-sm font-semibold text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 motion-reduce:transition-none dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
             >
               {loading ? "Procesando..." : buttonLabel}
@@ -784,7 +777,7 @@ export function PaymentFlow({
                   disabled={
                     yappyLoading ||
                     !canManage ||
-                    hasCheckoutMinimumIssue ||
+                    hasInvalidCheckoutAmount ||
                     Boolean(localYappyIntent) ||
                     !isYappyFormReady ||
                     !acceptedYappyTerms

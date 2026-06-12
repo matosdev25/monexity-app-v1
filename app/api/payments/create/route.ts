@@ -4,10 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import {
   validateDiscountCodeForAmount,
 } from "@/lib/discounts/validate-discount-code";
-import {
-  MINIMUM_DISCOUNTED_PAYMENT,
-  MINIMUM_DISCOUNTED_PAYMENT_MESSAGE,
-} from "@/lib/discounts/constants";
 import { createPagueloFacilPaymentLink, getPlanAmount } from "@/lib/paguelofacil";
 import { PLAN_MAP } from "@/lib/plans/plans";
 
@@ -199,13 +195,10 @@ export async function POST(req: NextRequest) {
     appliedDiscountCode = validation.code;
     discountAmount = validation.discountAmount;
     exactAmount = roundMoney(validation.finalAmount);
+  }
 
-    if (exactAmount < MINIMUM_DISCOUNTED_PAYMENT) {
-      return NextResponse.json(
-        { error: MINIMUM_DISCOUNTED_PAYMENT_MESSAGE },
-        { status: 400 }
-      );
-    }
+  if (!Number.isFinite(exactAmount) || exactAmount <= 0) {
+    return NextResponse.json({ error: "El total final debe ser mayor a $0.00." }, { status: 400 });
   }
 
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -217,7 +210,6 @@ export async function POST(req: NextRequest) {
     .eq("plan_id", planId)
     .eq("billing_cycle", billingCycle)
     .eq("exact_amount", exactAmount)
-    .eq("intent_type", intentType)
     .eq("provider", "paguelofacil")
     .in("status", ["pending", "claimed", "awaiting_verification"])
     .gt("expires_at", new Date().toISOString())
@@ -236,7 +228,7 @@ export async function POST(req: NextRequest) {
       discountAmount,
       error: existingIntentError.message,
     });
-    return NextResponse.json({ error: "No se pudo revisar el pago pendiente." }, { status: 500 });
+    return NextResponse.json({ error: "No se pudo iniciar el pago con tarjeta." }, { status: 500 });
   }
 
   let intentId = existingIntent?.id ?? null;
@@ -253,7 +245,6 @@ export async function POST(req: NextRequest) {
         exact_amount: exactAmount,
         provider: "paguelofacil",
         expires_at: expiresAt,
-        intent_type: intentType,
       })
       .select("id")
       .single();
@@ -327,7 +318,6 @@ export async function POST(req: NextRequest) {
       discount_code_id: discountCodeId,
       discount_code: appliedDiscountCode,
       discount_amount: discountAmount,
-      intent_type: intentType,
     })
     .eq("id", intentId);
 

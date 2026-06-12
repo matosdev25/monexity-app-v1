@@ -1,10 +1,6 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  MINIMUM_DISCOUNTED_PAYMENT,
-  MINIMUM_DISCOUNTED_PAYMENT_MESSAGE,
-} from "@/lib/discounts/constants";
 
 export type DiscountBillingCycle = "monthly" | "annual";
 
@@ -82,8 +78,8 @@ export async function validateDiscountCodeForAmount(
   const discountAmount = Number(Math.min(baseAmount, rawDiscount).toFixed(2));
   const finalAmount = Number((baseAmount - discountAmount).toFixed(2));
 
-  if (finalAmount < MINIMUM_DISCOUNTED_PAYMENT) {
-    return { ok: false, code, message: MINIMUM_DISCOUNTED_PAYMENT_MESSAGE };
+  if (finalAmount <= 0) {
+    return { ok: false, code, message: "El total final debe ser mayor a $0.00." };
   }
 
   return {
