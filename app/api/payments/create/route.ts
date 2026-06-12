@@ -20,6 +20,10 @@ const PLAN_LEVELS: Record<string, number> = {
   equipo: 3,
 };
 
+function roundMoney(value: number) {
+  return Number(value.toFixed(2));
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -75,7 +79,7 @@ export async function POST(req: NextRequest) {
     currentPlanId && (currentPlanId !== planId || currentCycle !== billingCycle)
   );
   let intentType: PaymentIntentType = "subscription_payment";
-  let exactAmount = getPlanAmount(plan, billingCycle);
+  let exactAmount = roundMoney(getPlanAmount(plan, billingCycle));
   let discountCodeId: string | null = null;
   let appliedDiscountCode: string | null = null;
   let discountAmount = 0;
@@ -162,8 +166,8 @@ export async function POST(req: NextRequest) {
     }
 
     intentType = "plan_upgrade";
-    exactAmount = Number(
-      (getPlanAmount(plan, currentCycle) - getPlanAmount(PLAN_MAP[currentPlanId], currentCycle)).toFixed(2)
+    exactAmount = roundMoney(
+      getPlanAmount(plan, currentCycle) - getPlanAmount(PLAN_MAP[currentPlanId], currentCycle)
     );
 
     if (exactAmount <= 0) {
@@ -194,7 +198,7 @@ export async function POST(req: NextRequest) {
     discountCodeId = discount?.id ?? null;
     appliedDiscountCode = validation.code;
     discountAmount = validation.discountAmount;
-    exactAmount = validation.finalAmount;
+    exactAmount = roundMoney(validation.finalAmount);
 
     if (exactAmount < MINIMUM_DISCOUNTED_PAYMENT) {
       return NextResponse.json(
@@ -205,30 +209,91 @@ export async function POST(req: NextRequest) {
   }
 
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase.rpc("create_paguelofacil_payment_intent", {
-    p_company_id: companyId,
-    p_user_id: user.id,
-    p_plan_id: planId,
-    p_billing_cycle: billingCycle,
-    p_exact_amount: exactAmount,
-    p_expires_at: expiresAt,
-    p_intent_type: intentType,
-  });
 
-  if (error) {
-    if (error.message.includes("FORBIDDEN")) {
-      return NextResponse.json({ error: "Sin acceso" }, { status: 403 });
-    }
-    return NextResponse.json({ error: "No se pudo iniciar el pago." }, { status: 500 });
+  const { data: existingIntent, error: existingIntentError } = await admin
+    .from("payment_intents")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("plan_id", planId)
+    .eq("billing_cycle", billingCycle)
+    .eq("exact_amount", exactAmount)
+    .eq("intent_type", intentType)
+    .eq("provider", "paguelofacil")
+    .in("status", ["pending", "claimed", "awaiting_verification"])
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingIntentError) {
+    console.error("PagueloFacil existing intent lookup failed", {
+      companyId,
+      userId: user.id,
+      planId,
+      billingCycle,
+      exactAmount,
+      discountCode: appliedDiscountCode,
+      discountAmount,
+      error: existingIntentError.message,
+    });
+    return NextResponse.json({ error: "No se pudo revisar el pago pendiente." }, { status: 500 });
   }
 
-  const result = data?.[0];
-  if (!result?.intent_id) {
-    return NextResponse.json({ error: "No se pudo iniciar el pago." }, { status: 500 });
+  let intentId = existingIntent?.id ?? null;
+  const isExisting = Boolean(intentId);
+
+  if (!intentId) {
+    const { data: createdIntent, error: createIntentError } = await admin
+      .from("payment_intents")
+      .insert({
+        company_id: companyId,
+        user_id: user.id,
+        plan_id: planId,
+        billing_cycle: billingCycle,
+        exact_amount: exactAmount,
+        provider: "paguelofacil",
+        expires_at: expiresAt,
+        intent_type: intentType,
+      })
+      .select("id")
+      .single();
+
+    if (createIntentError || !createdIntent?.id) {
+      console.error("PagueloFacil intent creation failed", {
+        companyId,
+        userId: user.id,
+        planId,
+        billingCycle,
+        baseAmount: getPlanAmount(plan, billingCycle),
+        discountCode: appliedDiscountCode,
+        discountAmount,
+        exactAmount,
+        error: createIntentError?.message,
+      });
+      return NextResponse.json({ error: "No se pudo crear el intento de pago." }, { status: 500 });
+    }
+
+    intentId = createdIntent.id;
+
+    const { error: auditError } = await admin
+      .from("payment_audit_logs")
+      .insert({
+        intent_id: intentId,
+        action: "created",
+        to_status: "pending",
+        actor_type: "user",
+      });
+
+    if (auditError) {
+      console.error("PagueloFacil audit log creation failed", {
+        intentId,
+        error: auditError.message,
+      });
+    }
   }
 
   const returnUrl = new URL("/api/payments/paguelofacil/return", req.nextUrl.origin);
-  returnUrl.searchParams.set("intent", result.intent_id);
+  returnUrl.searchParams.set("intent", intentId);
 
   let checkout;
   try {
@@ -236,9 +301,19 @@ export async function POST(req: NextRequest) {
       amount: exactAmount,
       description: `Monexity ${plan.name} ${billingCycle}`,
       returnUrl: returnUrl.toString(),
-      intentId: result.intent_id,
+      intentId,
     });
-  } catch {
+  } catch (error) {
+    console.error("PagueloFacil checkout link creation failed", {
+      companyId,
+      userId: user.id,
+      planId,
+      billingCycle,
+      discountCode: appliedDiscountCode,
+      discountAmount,
+      exactAmount,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ error: "No se pudo conectar con PagueloFácil." }, { status: 502 });
   }
 
@@ -254,17 +329,23 @@ export async function POST(req: NextRequest) {
       discount_amount: discountAmount,
       intent_type: intentType,
     })
-    .eq("id", result.intent_id);
+    .eq("id", intentId);
 
   if (updateError) {
+    console.error("PagueloFacil checkout intent update failed", {
+      intentId,
+      companyId,
+      exactAmount,
+      error: updateError.message,
+    });
     return NextResponse.json({ error: "No se pudo preparar el checkout." }, { status: 500 });
   }
 
   return NextResponse.json({
-    intentId: result.intent_id,
+    intentId,
     exactAmount,
     expiresAt,
-    isExisting: result.is_existing,
+    isExisting,
     checkoutUrl: checkout.checkoutUrl,
   });
 }
