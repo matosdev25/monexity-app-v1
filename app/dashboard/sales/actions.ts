@@ -1166,9 +1166,39 @@ export async function updateSale(
     existingSale.has_payment_plan ||
     String(existingSale.payment_type ?? "").toLowerCase() === "installment"
   ) {
-    return fail(
-      "Por ahora la edición de ventas a cuotas se manejará en un flujo separado."
-    );
+    if (paymentType !== "installment") {
+      return fail("Las ventas a cuota deben conservar el tipo de pago cuotas.");
+    }
+
+    const noteValue = note || invoiceNotes || null;
+    const { data: updatedSale, error: updateSaleError } = await context.supabase
+      .from("sales")
+      .update({
+        customer_name: customerName || null,
+        customer_company: customerCompany || null,
+        customer_email: customerEmail || null,
+        customer_phone: customerPhone || null,
+        payment_method: paymentMethod,
+        sale_date: saleDate,
+        payment_date: paymentDate || null,
+        note: noteValue,
+        invoice_notes: invoiceNotes || null,
+      })
+      .eq("id", saleId)
+      .eq("company_id", context.companyId)
+      .select("id")
+      .maybeSingle();
+
+    if (updateSaleError) {
+      return fail(updateSaleError.message || "No se pudo actualizar la venta.");
+    }
+
+    if (!updatedSale?.id) {
+      return fail("No se encontró la venta a editar.");
+    }
+
+    revalidateSalesPages();
+    return ok("Venta actualizada correctamente.");
   }
 
   if (paymentType === "installment") {

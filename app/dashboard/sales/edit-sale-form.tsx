@@ -136,6 +136,7 @@ export function EditSaleForm({
   const [state, formAction] = useActionState(updateSale, initialState);
   const [showSuccess, setShowSuccess] = useState(false);
   const [saleDate, setSaleDate] = useState(sale.sale_date ?? "");
+  const isInstallmentSale = String(sale.payment_type ?? "").toLowerCase() === "installment";
 
   const initialAmount = useMemo(() => {
     const total = roundMoney(parseMoney(sale.amount));
@@ -156,7 +157,9 @@ export function EditSaleForm({
     () => String(roundMoney(parseMoney(sale.discount_amount)))
   );
   const [paymentType, setPaymentType] = useState(
-    String(sale.payment_type ?? "full").toLowerCase() === "partial"
+    isInstallmentSale
+      ? "installment"
+      : String(sale.payment_type ?? "full").toLowerCase() === "partial"
       ? "partial"
       : "full"
   );
@@ -234,6 +237,13 @@ export function EditSaleForm({
       <input type="hidden" name="itemQuantity[]" value="1" />
       <input type="hidden" name="itemUnitPrice[]" value={rawAmount} />
       <input type="hidden" name="discountAmount" value={rawDiscount || "0"} />
+      {isInstallmentSale ? (
+        <>
+          <input type="hidden" name="amount" value={rawAmount} />
+          <input type="hidden" name="paidAmount" value={effectivePaidAmount} />
+          <input type="hidden" name="paymentType" value="installment" />
+        </>
+      ) : null}
 
       <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 dark:border-amber-500/20 dark:bg-amber-500/10">
         <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700/80 dark:text-amber-300/80">
@@ -317,10 +327,15 @@ export function EditSaleForm({
               const normalized = normalizeAmountInput(e.target.value);
               setRawAmount(normalized);
             }}
-            className={inputClass}
+            readOnly={isInstallmentSale}
+            className={`${inputClass} ${
+              isInstallmentSale
+                ? "cursor-not-allowed bg-slate-50 text-slate-500 dark:bg-slate-900 dark:text-slate-400"
+                : ""
+            }`}
             placeholder="$ 0.00"
           />
-          <input type="hidden" name="amount" value={rawAmount} />
+          {!isInstallmentSale ? <input type="hidden" name="amount" value={rawAmount} /> : null}
           {numericDiscount > 0 && numericSubtotal > 0 ? (
             <div className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900/60">
               <div className="flex items-center justify-between gap-3 py-0.5 text-slate-500 dark:text-slate-400">
@@ -345,7 +360,12 @@ export function EditSaleForm({
             inputMode="decimal"
             value={rawDiscount ? formatAmountInput(rawDiscount) : ""}
             onChange={(e) => setRawDiscount(normalizeAmountInput(e.target.value))}
-            className={inputClass}
+            readOnly={isInstallmentSale}
+            className={`${inputClass} ${
+              isInstallmentSale
+                ? "cursor-not-allowed bg-slate-50 text-slate-500 dark:bg-slate-900 dark:text-slate-400"
+                : ""
+            }`}
             placeholder="$ 0.00"
           />
         </div>
@@ -375,14 +395,22 @@ export function EditSaleForm({
           </label>
           <select
             id={`paymentType-${sale.id}`}
-            name="paymentType"
+            name={isInstallmentSale ? undefined : "paymentType"}
             required
             value={paymentType}
-            onChange={(e) => setPaymentType(e.target.value)}
-            className={inputClass}
+            onChange={(e) => {
+              if (!isInstallmentSale) setPaymentType(e.target.value);
+            }}
+            disabled={isInstallmentSale}
+            className={`${inputClass} ${
+              isInstallmentSale
+                ? "cursor-not-allowed bg-slate-50 text-slate-500 dark:bg-slate-900 dark:text-slate-400"
+                : ""
+            }`}
           >
             <option value="full">Completo</option>
             <option value="partial">Abono</option>
+            {isInstallmentSale ? <option value="installment">Cuotas</option> : null}
           </select>
         </div>
       </div>
@@ -401,15 +429,17 @@ export function EditSaleForm({
               const normalized = normalizeAmountInput(e.target.value);
               setRawPaidAmount(normalized);
             }}
-            disabled={paymentType === "full"}
+            disabled={paymentType === "full" || isInstallmentSale}
             className={`${inputClass} ${
-              paymentType === "full"
+              paymentType === "full" || isInstallmentSale
                 ? "cursor-not-allowed bg-slate-50 text-slate-500 dark:bg-slate-900 dark:text-slate-400"
                 : ""
             }`}
             placeholder="$ 0.00"
           />
-          <input type="hidden" name="paidAmount" value={effectivePaidAmount} />
+          {!isInstallmentSale ? (
+            <input type="hidden" name="paidAmount" value={effectivePaidAmount} />
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/70">

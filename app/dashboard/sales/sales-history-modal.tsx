@@ -271,20 +271,20 @@ export function SalesHistoryModal({
               onClick={closeModal}
             />
 
-            <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-4">
               <div
-                className={`${panelClass} relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden`}
+                className={`${panelClass} relative flex h-[92dvh] max-h-[920px] w-full max-w-6xl flex-col overflow-hidden sm:h-[88vh]`}
               >
-                <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                <div className="shrink-0 border-b border-slate-200 px-4 py-3 dark:border-slate-800 sm:px-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-sm font-medium text-sky-700 dark:text-cyan-300">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-cyan-300">
                         Historial completo
                       </p>
-                      <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                      <h2 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50 sm:text-2xl">
                         Ventas
                       </h2>
-                      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                      <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
                         {rangeLabel}
                       </p>
                     </div>
@@ -299,7 +299,7 @@ export function SalesHistoryModal({
                     </button>
                   </div>
 
-                  <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px_170px_auto_auto]">
+                  <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_150px_150px_240px] lg:items-end">
                     <div>
                       <label className={labelClass}>Buscar</label>
                       <input
@@ -331,21 +331,19 @@ export function SalesHistoryModal({
                       />
                     </div>
 
-                    <div className="flex items-end">
+                    <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={handleApplyFilters}
-                        className={`${primaryButtonClass} w-full`}
+                        className={`${primaryButtonClass} h-10 w-full px-3 py-2`}
                       >
                         Aplicar filtros
                       </button>
-                    </div>
 
-                    <div className="flex items-end">
                       <button
                         type="button"
                         onClick={handleClearFilters}
-                        className={`${secondaryButtonClass} w-full`}
+                        className={`${secondaryButtonClass} h-10 w-full px-3 py-2`}
                       >
                         Limpiar
                       </button>
@@ -353,7 +351,7 @@ export function SalesHistoryModal({
                   </div>
 
                   {/* Filtro de estado */}
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-1.5">
                     {(["all", "pending", "partial", "paid"] as const).map((s) => {
                       const labels = { all: "Todas", pending: "Pendientes", partial: "Abonadas", paid: "Pagadas" };
                       const active = statusFilter === s;
@@ -377,7 +375,7 @@ export function SalesHistoryModal({
 
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5 sm:py-4">
                   {filteredSales.length > 0 ? (
                     <div className="grid gap-3">
                       {filteredSales.map((sale) => {

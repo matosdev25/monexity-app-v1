@@ -22,20 +22,15 @@ export function EditSaleModal({
   }, [sale.payment_type]);
 
   const openModal = useCallback(() => {
-    if (isInstallmentSale) return;
     dialogRef.current?.showModal();
-  }, [isInstallmentSale]);
+  }, []);
 
   const closeModal = useCallback(() => {
     dialogRef.current?.close();
   }, []);
 
-  if (isInstallmentSale) {
-    return <EditInstallmentPlanModal sale={sale} />;
-  }
-
   return (
-    <>
+    <div className="flex flex-wrap gap-3">
       <button
         type="button"
         onClick={openModal}
@@ -44,6 +39,8 @@ export function EditSaleModal({
       >
         Editar venta
       </button>
+
+      {isInstallmentSale ? <EditInstallmentPlanModal sale={sale} /> : null}
 
       <dialog
         ref={dialogRef}
@@ -70,7 +67,9 @@ export function EditSaleModal({
                     id={`edit-sale-description-${sale.id}`}
                     className="mt-1 text-sm text-slate-600 dark:text-slate-300"
                   >
-                    Actualiza los datos principales de la venta y guarda los cambios.
+                    {isInstallmentSale
+                      ? "Actualiza los datos principales sin modificar pagos ni cuotas registradas."
+                      : "Actualiza los datos principales de la venta y guarda los cambios."}
                   </p>
                 </div>
 
@@ -94,6 +93,6 @@ export function EditSaleModal({
           </div>
         </div>
       </dialog>
-    </>
+    </div>
   );
 }
