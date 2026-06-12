@@ -76,8 +76,11 @@ export function AccountSection({ companyId, canCancel, company, latestPayment }:
     ? formatShortDate(latestPayment.verified_at ?? latestPayment.created_at, "Fecha pendiente")
     : null;
   const isCancelled = ["cancelled", "canceled"].includes(status);
-  const hasValidTrial = status === "trialing" && hasValidTrialToday(company.trial_ends_at);
-  const trialEndsToday = status === "trialing" && isTrialEndingToday(company.trial_ends_at);
+  const isTrialing = status === "trialing";
+  const hasValidTrial = isTrialing && hasValidTrialToday(company.trial_ends_at);
+  const trialEnded = isTrialing && !hasValidTrial;
+  const trialEndsToday = isTrialing && isTrialEndingToday(company.trial_ends_at);
+  const statusLabel = trialEnded ? "Prueba vencida" : STATUS_LABELS[status] ?? status;
   const scheduledPlan = company.scheduled_subscription_plan
     ? PLAN_MAP[company.scheduled_subscription_plan]
     : null;
@@ -111,7 +114,7 @@ export function AccountSection({ companyId, canCancel, company, latestPayment }:
                 : "bg-sky-100 text-sky-700 dark:bg-cyan-500/15 dark:text-cyan-300",
             ].join(" ")}
           >
-            {STATUS_LABELS[status] ?? status}
+            {statusLabel}
           </span>
         </div>
 
@@ -174,6 +177,12 @@ export function AccountSection({ companyId, canCancel, company, latestPayment }:
             ) : (
               <>Estás en tu prueba gratis. Al finalizar el {formatDate(company.trial_ends_at)}, deberás pagar el plan {plan.name} para continuar usando Monexity.</>
             )}
+          </div>
+        )}
+
+        {trialEnded && plan && (
+          <div className="mt-5 rounded-[18px] border border-rose-200 bg-rose-50 p-4 text-sm leading-6 text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-300">
+            Tu prueba gratis finalizó. Elige un plan para continuar.
           </div>
         )}
 

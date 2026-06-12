@@ -129,7 +129,9 @@ export default async function BillingPage({
   const hasPaidAccess = isActive || isPaid;
   const isTrialing = status === "trialing";
   const hasValidTrial = isTrialing && hasValidTrialToday(trialEnd);
+  const trialEnded = isTrialing && !hasValidTrial;
   const trialEndsToday = isTrialing && isTrialEndingToday(trialEnd);
+  const statusLabel = trialEnded ? "Prueba vencida" : STATUS_LABELS[status] ?? status;
   const needsPayment = !hasPaidAccess && !hasValidTrial;
   const currentPlanName = PLAN_LABELS[planId ?? ""] ?? "seleccionado";
   const updatedTrialPlanName = params.trialPlanUpdated
@@ -223,7 +225,7 @@ export default async function BillingPage({
                 : "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
             ].join(" ")}
           >
-            {STATUS_LABELS[status] ?? status}
+            {statusLabel}
           </span>
         </div>
 
