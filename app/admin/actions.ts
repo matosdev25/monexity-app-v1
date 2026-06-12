@@ -29,6 +29,13 @@ function cleanDate(value: FormDataEntryValue | null) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function parseDecimalValue(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
+}
+
 export async function createDiscountCode(
   _prevState: ActionState,
   formData: FormData
@@ -40,7 +47,7 @@ export async function createDiscountCode(
   const description = cleanString(formData.get("description"));
   const discountType = String(formData.get("discountType") ?? "");
   const appliesTo = String(formData.get("appliesTo") ?? "both");
-  const discountValue = Number(formData.get("discountValue"));
+  const discountValue = parseDecimalValue(formData.get("discountValue"));
   const startsAt = cleanDate(formData.get("startsAt"));
   const expiresAt = cleanDate(formData.get("expiresAt"));
   const maxUsesRaw = String(formData.get("maxUses") ?? "").trim();
@@ -58,12 +65,12 @@ export async function createDiscountCode(
     return { success: false, message: "Selecciona una aplicación válida." };
   }
 
-  if (!Number.isFinite(discountValue)) {
-    return { success: false, message: "Ingresa un valor de descuento válido." };
+  if (discountValue === null) {
+    return { success: false, message: "Ingresa un valor de descuento válido con máximo 2 decimales." };
   }
 
-  if (discountType === "percentage" && (discountValue <= 0 || discountValue >= 100)) {
-    return { success: false, message: "El porcentaje debe ser mayor a 0 y menor a 100." };
+  if (discountType === "percentage" && (discountValue <= 0 || discountValue > 99.99)) {
+    return { success: false, message: "El porcentaje debe ser mayor a 0 y máximo 99.99." };
   }
 
   if (discountType === "fixed" && discountValue <= 0) {

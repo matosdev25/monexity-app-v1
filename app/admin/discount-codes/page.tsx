@@ -28,9 +28,13 @@ function formatDate(value: string | null) {
   return formatShortDate(value);
 }
 
+function formatPercentage(value: number | string) {
+  return `${Number(value).toFixed(2).replace(/\.?0+$/, "")}%`;
+}
+
 function formatDiscount(code: DiscountCode) {
   return code.discount_type === "percentage"
-    ? `${Number(code.discount_value).toFixed(0)}%`
+    ? formatPercentage(code.discount_value)
     : formatCurrency(code.discount_value);
 }
 
