@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef } from "react";
 import { EditSaleForm } from "./edit-sale-form";
+import { EditInstallmentPlanModal } from "./edit-installment-plan-modal";
 import type { Sale } from "./types";
 import type { SalePaymentMethodOption } from "./types";
 
@@ -30,16 +31,7 @@ export function EditSaleModal({
   }, []);
 
   if (isInstallmentSale) {
-    return (
-      <button
-        type="button"
-        disabled
-        title="Las ventas con cuotas se editarán en un flujo separado"
-        className="cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-400 opacity-90 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-500"
-      >
-        Editar cuotas
-      </button>
-    );
+    return <EditInstallmentPlanModal sale={sale} />;
   }
 
   return (

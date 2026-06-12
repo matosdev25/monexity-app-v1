@@ -41,6 +41,19 @@ type InstallmentPlanInput = {
   downPaymentAmount: number;
 };
 
+export type EditableInstallmentPlan = {
+  saleId: string;
+  saleAmount: number;
+  customerPhone: string | null;
+  planName: string | null;
+  frequency: InstallmentFrequency;
+  installmentAmount: number;
+  installmentsCount: number;
+  startDate: string;
+  planNotes: string | null;
+  downPaymentAmount: number;
+};
+
 type ExistingSaleRow = {
   id: string;
   payment_type: string | null;
@@ -160,6 +173,29 @@ function parsePositiveInteger(value: string) {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function formatDateOnly(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function getInstallmentDueDate(startDate: string, frequency: InstallmentFrequency, index: number) {
+  const baseDate = new Date(`${startDate}T00:00:00`);
+  if (frequency === "weekly") return formatDateOnly(addDays(baseDate, index * 7));
+  if (frequency === "biweekly") return formatDateOnly(addDays(baseDate, index * 14));
+  return formatDateOnly(addMonths(baseDate, index));
 }
 
 function isValidDateOnly(value: string) {
@@ -1464,6 +1500,197 @@ export async function deletePayment(
   await recalcSaleTotals(context.supabase, saleId, context.companyId);
   revalidateSalesPages();
   return ok("Pago eliminado.");
+}
+
+export async function fetchEditableInstallmentPlan(
+  saleId: string
+): Promise<EditableInstallmentPlan | null> {
+  const context = await getSalesContext();
+  if (context.error || !context.companyId || !saleId) return null;
+  if (!canManageSalesRecords(context.role)) return null;
+
+  const [{ data: sale }, { data: plan }] = await Promise.all([
+    context.supabase
+      .from("sales")
+      .select("id, amount, customer_phone, payment_type, has_payment_plan")
+      .eq("id", saleId)
+      .eq("company_id", context.companyId)
+      .maybeSingle(),
+    context.supabase
+      .from("sale_payment_plans")
+      .select("plan_name, down_payment_amount, installment_amount, installments_count, frequency, start_date, notes")
+      .eq("sale_id", saleId)
+      .eq("company_id", context.companyId)
+      .maybeSingle(),
+  ]);
+
+  if (
+    !sale?.id ||
+    !plan ||
+    String(sale.payment_type ?? "").toLowerCase() !== "installment" ||
+    !sale.has_payment_plan
+  ) {
+    return null;
+  }
+
+  const frequency = String(plan.frequency ?? "monthly") as InstallmentFrequency;
+  if (!ALLOWED_INSTALLMENT_FREQUENCIES.includes(frequency)) return null;
+
+  return {
+    saleId: String(sale.id),
+    saleAmount: Number(sale.amount ?? 0),
+    customerPhone: sale.customer_phone as string | null,
+    planName: plan.plan_name as string | null,
+    frequency,
+    installmentAmount: Number(plan.installment_amount ?? 0),
+    installmentsCount: Number(plan.installments_count ?? 0),
+    startDate: String(plan.start_date ?? ""),
+    planNotes: plan.notes as string | null,
+    downPaymentAmount: Number(plan.down_payment_amount ?? 0),
+  };
+}
+
+export async function updateSaleInstallmentPlan(
+  prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  void prevState;
+
+  const context = await getSalesContext();
+  if (context.error || !context.companyId || !context.userId) {
+    return fail(context.error ?? "No se pudo validar el usuario.");
+  }
+  if (!canManageSalesRecords(context.role)) {
+    return fail("No tienes permisos para editar cuotas.");
+  }
+
+  const saleId = getString(formData, "saleId");
+  if (!saleId) return fail("No se encontró la venta a editar.");
+
+  const { data: sale, error: saleError } = await context.supabase
+    .from("sales")
+    .select("id, amount, payment_type, has_payment_plan")
+    .eq("id", saleId)
+    .eq("company_id", context.companyId)
+    .maybeSingle();
+
+  if (saleError) return fail(saleError.message || "No se pudo validar la venta.");
+  if (
+    !sale?.id ||
+    String(sale.payment_type ?? "").toLowerCase() !== "installment" ||
+    !sale.has_payment_plan
+  ) {
+    return fail("Esta venta no tiene un plan de cuotas editable.");
+  }
+
+  const [{ count: paymentsCount }, { count: paidInstallmentsCount }] = await Promise.all([
+    context.supabase
+      .from("sale_payments")
+      .select("id", { count: "exact", head: true })
+      .eq("sale_id", saleId)
+      .eq("company_id", context.companyId),
+    context.supabase
+      .from("sale_installments")
+      .select("id", { count: "exact", head: true })
+      .eq("sale_id", saleId)
+      .eq("company_id", context.companyId)
+      .eq("status", "paid"),
+  ]);
+
+  if ((paymentsCount ?? 0) > 0 || (paidInstallmentsCount ?? 0) > 0) {
+    return fail("No se pueden editar cuotas que ya tienen pagos registrados.");
+  }
+
+  const subtotal = roundMoney(Number(sale.amount ?? 0));
+  if (!Number.isFinite(subtotal) || subtotal <= 0) {
+    return fail("El monto de la venta no es válido.");
+  }
+
+  const parsedPlan = parseInstallmentPlan(formData, subtotal);
+  if ("error" in parsedPlan) {
+    return fail(parsedPlan.error);
+  }
+
+  const customerPhone = getString(formData, "customerPhone");
+  const plan = parsedPlan.data;
+  const remainingBalance = roundMoney(subtotal - plan.downPaymentAmount);
+  const regularInstallmentsTotal = roundMoney(plan.installmentAmount * (plan.installmentsCount - 1));
+  const lastInstallmentAmount = roundMoney(remainingBalance - regularInstallmentsTotal);
+
+  if (lastInstallmentAmount <= 0) {
+    return fail("El monto por cuota excede el saldo pendiente para la cantidad indicada.");
+  }
+
+  const installmentsPayload = Array.from({ length: plan.installmentsCount }, (_, index) => {
+    const amount = index === plan.installmentsCount - 1
+      ? lastInstallmentAmount
+      : plan.installmentAmount;
+
+    return {
+      sale_id: saleId,
+      company_id: context.companyId,
+      installment_number: index + 1,
+      due_date: getInstallmentDueDate(plan.startDate, plan.frequency, index),
+      amount,
+      paid_amount: 0,
+      status: "pending",
+    };
+  });
+
+  const { error: updatePlanError } = await context.supabase
+    .from("sale_payment_plans")
+    .update({
+      plan_name: plan.planName,
+      down_payment_amount: plan.downPaymentAmount,
+      installment_amount: plan.installmentAmount,
+      installments_count: plan.installmentsCount,
+      frequency: plan.frequency,
+      start_date: plan.startDate,
+      notes: plan.planNotes,
+    })
+    .eq("sale_id", saleId)
+    .eq("company_id", context.companyId);
+
+  if (updatePlanError) {
+    return fail(updatePlanError.message || "No se pudo actualizar el plan de cuotas.");
+  }
+
+  const { error: deleteInstallmentsError } = await context.supabase
+    .from("sale_installments")
+    .delete()
+    .eq("sale_id", saleId)
+    .eq("company_id", context.companyId);
+
+  if (deleteInstallmentsError) {
+    return fail(deleteInstallmentsError.message || "No se pudieron reemplazar las cuotas.");
+  }
+
+  const { error: insertInstallmentsError } = await context.supabase
+    .from("sale_installments")
+    .insert(installmentsPayload);
+
+  if (insertInstallmentsError) {
+    return fail(insertInstallmentsError.message || "No se pudieron guardar las cuotas.");
+  }
+
+  const paymentStatus = plan.downPaymentAmount > 0 ? "partial" : "pending";
+  const { error: updateSaleError } = await context.supabase
+    .from("sales")
+    .update({
+      customer_phone: customerPhone || null,
+      paid_amount: plan.downPaymentAmount,
+      balance_due: remainingBalance,
+      payment_status: paymentStatus,
+    })
+    .eq("id", saleId)
+    .eq("company_id", context.companyId);
+
+  if (updateSaleError) {
+    return fail(updateSaleError.message || "No se pudo actualizar el saldo de la venta.");
+  }
+
+  revalidateSalesPages();
+  return ok("Plan de cuotas actualizado correctamente.");
 }
 
 export async function deleteSale(formData: FormData): Promise<void> {

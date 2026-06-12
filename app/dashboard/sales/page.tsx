@@ -269,6 +269,11 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
     0
   );
 
+  const totalCollected = allSales.reduce(
+    (sum, sale) => sum + Number(sale.paid_amount ?? 0),
+    0
+  );
+
   const installmentSalesCount = allSales.filter(
     (sale) => String(sale.payment_type ?? "").toLowerCase() === "installment"
   ).length;
@@ -301,7 +306,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
               </p>
             </div>
 
-            <div className="grid min-w-[220px] gap-3 sm:grid-cols-2 xl:w-[520px]">
+            <div className="grid min-w-[220px] gap-3 sm:grid-cols-3 xl:w-[780px]">
               <div className={statCardClass}>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                   Total general
@@ -311,6 +316,18 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
                 </p>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                   Suma acumulada de ventas registradas.
+                </p>
+              </div>
+
+              <div className={statCardClass}>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  Cobrado
+                </p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                  {formatCurrency(totalCollected)}
+                </p>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  Dinero recibido por ventas.
                 </p>
               </div>
 

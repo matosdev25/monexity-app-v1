@@ -475,16 +475,12 @@ export function SalesHistoryModal({
                             ) : null}
 
                             <div className="mt-3 flex flex-wrap gap-3">
-                              {canManageRecords && !isInstallment ? (
+                              {canManageRecords ? (
                                 <EditSaleModal
                                   sale={sale}
                                   paymentMethods={paymentMethods}
                                   canEditManualDates={canEditManualDates}
                                 />
-                              ) : canManageRecords ? (
-                                <span className="inline-flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
-                                  La edición de cuotas irá en un flujo separado
-                                </span>
                               ) : null}
 
                               {(sale.payment_status === "pending" ||
