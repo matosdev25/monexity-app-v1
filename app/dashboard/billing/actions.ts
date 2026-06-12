@@ -86,6 +86,7 @@ export type DiscountValidationResult =
 
 export async function validateDiscountCode(
   companyId: string,
+  planId: string,
   billingCycle: BillingCycle,
   rawCode: string
 ): Promise<DiscountValidationResult> {
@@ -126,22 +127,20 @@ export async function validateDiscountCode(
     .eq("id", companyId)
     .maybeSingle();
 
-  if (!company?.subscription_plan || !PLAN_MAP[company.subscription_plan]) {
-    return { ok: false, code, message: "No se encontró el plan actual del negocio." };
+  if (!PLAN_MAP[planId]) {
+    return { ok: false, code, message: "Selecciona un plan válido." };
   }
 
   if (
-    company.subscription_status === "trialing" &&
+    company?.subscription_status === "trialing" &&
     company.trial_ends_at &&
     new Date(company.trial_ends_at).getTime() > Date.now()
   ) {
     return { ok: false, code, message: "Podrás aplicar el código cuando finalice tu prueba gratis." };
   }
 
-  const companyCycle = company.subscription_billing_cycle as BillingCycle | null;
-  const effectiveCycle = companyCycle ?? billingCycle;
-  const baseAmount = getPlanAmount(PLAN_MAP[company.subscription_plan], effectiveCycle);
-  const validation = await validateDiscountCodeForAmount(code, effectiveCycle, baseAmount);
+  const baseAmount = getPlanAmount(PLAN_MAP[planId], billingCycle);
+  const validation = await validateDiscountCodeForAmount(code, billingCycle, baseAmount);
 
   return validation.ok
     ? { ...validation, baseAmount }
@@ -152,6 +151,8 @@ export async function createYappyManualPayment(
   companyId: string,
   rawSenderName: string,
   rawSenderPhone: string,
+  selectedPlanId: string,
+  selectedBillingCycle: BillingCycle,
   rawDiscountCode?: string
 ): Promise<YappyPaymentResult> {
   const supabase = await createClient();
@@ -189,8 +190,12 @@ export async function createYappyManualPayment(
     .eq("id", companyId)
     .maybeSingle();
 
-  if (!company?.subscription_plan || !PLAN_MAP[company.subscription_plan]) {
-    return { success: false, error: "No se encontró el plan actual del negocio." };
+  if (!company) {
+    return { success: false, error: "No se encontró el negocio." };
+  }
+
+  if (!PLAN_MAP[selectedPlanId] || !["monthly", "annual"].includes(selectedBillingCycle)) {
+    return { success: false, error: "Selecciona un plan válido." };
   }
 
   const currentStatus = String(company.subscription_status ?? "").toLowerCase();
@@ -205,8 +210,8 @@ export async function createYappyManualPayment(
     return { success: false, error: "Tu membresía aún está activa." };
   }
 
-  const planId = company.subscription_plan;
-  const billingCycle = (company.subscription_billing_cycle ?? "monthly") as BillingCycle;
+  const planId = selectedPlanId;
+  const billingCycle = selectedBillingCycle;
   const plan = PLAN_MAP[planId];
   let exactAmount = getPlanAmount(plan, billingCycle);
   let discountCodeId: string | null = null;

@@ -80,18 +80,6 @@ export async function POST(req: NextRequest) {
   let appliedDiscountCode: string | null = null;
   let discountAmount = 0;
 
-  if (
-    !hasPaidAccess &&
-    !hasValidTrial &&
-    currentPlanId &&
-    (planId !== currentPlanId || (currentCycle && billingCycle !== currentCycle))
-  ) {
-    return NextResponse.json(
-      { error: "Para continuar, realiza el pago del plan actual de tu negocio." },
-      { status: 400 }
-    );
-  }
-
   if (!isPlanChange && (hasPaidAccess || hasValidTrial)) {
     return NextResponse.json(
       { error: "Selecciona un plan distinto para iniciar un cambio." },

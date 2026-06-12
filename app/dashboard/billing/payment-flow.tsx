@@ -198,6 +198,8 @@ export function PaymentFlow({
         companyId,
         yappySenderName.trim(),
         yappySenderPhone,
+        selectedPlan,
+        billingCycle,
         discountResult?.ok ? discountResult.code : undefined
       );
 
@@ -272,7 +274,7 @@ export function PaymentFlow({
   );
   const normalizedDiscountCode = discountCode.trim().toUpperCase();
   const showPrimaryAction = needsInitialPayment || isPlanChange;
-  const paymentPlanLocked = needsInitialPayment && Boolean(currentPlanId);
+  const paymentPlanLocked = false;
   const selectedPlanConfig = PLANS.find((plan) => plan.id === selectedPlan) ?? null;
   const baseAmount = selectedPlanConfig
     ? Number(
@@ -325,7 +327,12 @@ export function PaymentFlow({
 
     setDiscountStatus("validating");
     startDiscountTransition(async () => {
-      const result = await validateDiscountCode(companyId, billingCycle, normalizedDiscountCode);
+      const result = await validateDiscountCode(
+        companyId,
+        selectedPlan,
+        billingCycle,
+        normalizedDiscountCode
+      );
       setDiscountResult(result);
       setDiscountStatus(result.ok ? "applied" : "invalid");
     });
