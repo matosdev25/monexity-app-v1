@@ -62,7 +62,7 @@ export async function verifyEmailToken(
 
     const cookieStore = await cookies();
     if (!company || !(await canAccessCompanyAppWithPendingYappy({ ...company, id: companyId }, adminClient))) {
-      return { success: true, redirectTo: "/dashboard/billing" };
+      return { success: true, redirectTo: "/dashboard/mi-negocio?tab=cuenta" };
     }
 
     cookieStore.set("active_company_id", companyId, {

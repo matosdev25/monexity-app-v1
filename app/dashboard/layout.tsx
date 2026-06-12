@@ -21,6 +21,20 @@ export type CompanyOption = {
   logoUrl: string | null;
 };
 
+const ACCOUNT_ROUTE = "/dashboard/mi-negocio";
+const ACCOUNT_ROUTE_WITH_TAB = "/dashboard/mi-negocio?tab=cuenta";
+const BILLING_ROUTE = "/dashboard/billing";
+
+function isExpiredAccountRoute(pathname: string, search: string) {
+  if (pathname !== ACCOUNT_ROUTE) return false;
+  const params = new URLSearchParams(search);
+  return params.get("tab") === "cuenta";
+}
+
+function isExpiredAllowedDashboardPath(pathname: string, search: string) {
+  return pathname.startsWith(BILLING_ROUTE) || isExpiredAccountRoute(pathname, search);
+}
+
 function PausedAccessScreen() {
   return (
     <main className="h-dvh overflow-hidden text-app">
@@ -147,7 +161,8 @@ export default async function DashboardLayout({
   const headersList = await headers();
   const cookieCompanyId = cookieStore.get("active_company_id")?.value ?? null;
   const pathname = headersList.get("x-pathname") ?? "";
-  const isBillingPath = pathname.startsWith("/dashboard/billing");
+  const search = headersList.get("x-search") ?? "";
+  const isBillingPath = pathname.startsWith(BILLING_ROUTE);
 
   const validCookieCompany = cookieCompanyId
     ? companiesData.find((c) => c.id === cookieCompanyId) ?? null
@@ -194,15 +209,17 @@ export default async function DashboardLayout({
   const activeRole = String(activeMembership?.role ?? "").toLowerCase();
 
   if (!canAccessActiveCompany) {
-    if (!isBillingPath) {
-      redirect("/dashboard/billing");
+    if (!isExpiredAllowedDashboardPath(pathname, search)) {
+      redirect(ACCOUNT_ROUTE_WITH_TAB);
     }
 
     if (activeRole !== "owner") {
       return <PausedAccessScreen />;
     }
 
-    return <BillingAccessShell>{children}</BillingAccessShell>;
+    if (isBillingPath) {
+      return <BillingAccessShell>{children}</BillingAccessShell>;
+    }
   }
 
   if (isBillingPath && activeRole !== "owner") {

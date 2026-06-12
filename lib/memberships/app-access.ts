@@ -170,5 +170,5 @@ export async function getCurrentUserAppEntryPath(currentUser?: {
     return `/onboarding/plan?cid=${membership.company_id}`;
   }
 
-  return "/dashboard/billing";
+  return "/dashboard/mi-negocio?tab=cuenta";
 }

@@ -18,6 +18,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);
+  requestHeaders.set("x-search", request.nextUrl.search);
 
   // ── Waitlist mode ────────────────────────────────────────────────────────────
   if (WAITLIST_MODE) {

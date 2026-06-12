@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
 
   const cookieStore = await cookies();
   if (!company || !(await canAccessCompanyAppWithPendingYappy({ ...company, id: companyId }, adminClient))) {
-    return NextResponse.redirect(new URL("/dashboard/billing", origin));
+    return NextResponse.redirect(new URL("/dashboard/mi-negocio?tab=cuenta", origin));
   }
 
   cookieStore.set("active_company_id", companyId, {
