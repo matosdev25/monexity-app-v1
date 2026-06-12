@@ -9,10 +9,7 @@ import { InactivityLogout } from "@/components/inactivity-logout";
 import { logout } from "@/app/auth/logout/actions";
 import { resolveLogoUrl } from "../../lib/storage/resolve-logo";
 import { isGlobalAdminEmail } from "../../lib/admin-auth";
-import {
-  canAccessCompanyApp,
-  canAccessCompanyAppWithPendingYappy,
-} from "../../lib/memberships/app-access";
+import { canAccessCompanyApp } from "../../lib/memberships/app-access";
 
 export type CompanyOption = {
   companyId: string;
@@ -171,20 +168,9 @@ export default async function DashboardLayout({
   const validAccessCompany =
     companiesData.find((company) => canAccessCompanyApp(company)) ?? null;
 
-  let validPendingCompany: CompanyRow | null = null;
-  if (!validCookieCompany && !validAccessCompany) {
-    for (const company of companiesData) {
-      if (await canAccessCompanyAppWithPendingYappy(company)) {
-        validPendingCompany = company;
-        break;
-      }
-    }
-  }
-
   const activeCompany =
     validCookieCompany ??
     validAccessCompany ??
-    validPendingCompany ??
     companiesData[0];
 
   if (cookieCompanyId && cookieCompanyId !== activeCompany.id) {
@@ -205,7 +191,7 @@ export default async function DashboardLayout({
   }
 
   const canAccessActiveCompany =
-    isGlobalAdmin || (await canAccessCompanyAppWithPendingYappy(activeCompany));
+    isGlobalAdmin || canAccessCompanyApp(activeCompany);
   const activeRole = String(activeMembership?.role ?? "").toLowerCase();
 
   if (!canAccessActiveCompany) {

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "../../../lib/supabase/server";
+import { isGlobalAdminEmail } from "../../../lib/admin-auth";
+import { canAccessCompanyApp } from "../../../lib/memberships/app-access";
 import {
   getNextDocumentNumber,
   isDuplicateDocumentNumberError,
@@ -105,7 +107,7 @@ async function getQuotationsContext() {
 
   const membershipQuery = supabase
     .from("memberships")
-    .select("company_id, role, companies(name)")
+    .select("company_id, role, companies(name, subscription_status, subscription_plan, trial_ends_at, current_period_ends_at, is_blocked)")
     .eq("user_id", user.id);
 
   const { data: membership, error: membershipError } = await (
@@ -123,12 +125,31 @@ async function getQuotationsContext() {
     };
   }
 
+  type MembershipCompany = {
+    name?: string | null;
+    subscription_status: string | null;
+    subscription_plan: string | null;
+    trial_ends_at: string | null;
+    current_period_ends_at: string | null;
+    is_blocked: boolean | null;
+  };
+  const companies = membership.companies as unknown as MembershipCompany | MembershipCompany[] | null;
+  const company = Array.isArray(companies) ? companies[0] ?? null : companies;
+
+  if (!isGlobalAdminEmail(user.email) && (!company || !canAccessCompanyApp(company))) {
+    return {
+      supabase,
+      userId: user.id,
+      companyId: null,
+      error: "Tu cuenta necesita pago activo para usar cotizaciones.",
+    };
+  }
+
   return {
     supabase,
     userId: user.id,
     companyId: membership.company_id as string,
-    companyName:
-      (membership.companies as { name?: string | null } | null)?.name ?? null,
+    companyName: company?.name ?? null,
     role: String(membership.role ?? "").toLowerCase(),
     error: null,
   };

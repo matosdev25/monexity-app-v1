@@ -1,5 +1,5 @@
 import { createClient } from "../supabase/server";
-import { canAccessCompanyAppWithPendingYappy } from "../memberships/app-access";
+import { canAccessCompanyApp } from "../memberships/app-access";
 
 type CompanyMembershipRole = "owner" | "admin" | "seller" | string;
 
@@ -116,7 +116,7 @@ export async function getActiveCompanyContext(
     };
   }
 
-  const canOperate = await canAccessCompanyAppWithPendingYappy(company, supabase);
+  const canOperate = canAccessCompanyApp(company);
 
   return {
     ok: true,

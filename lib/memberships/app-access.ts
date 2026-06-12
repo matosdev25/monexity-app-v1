@@ -15,8 +15,25 @@ export type AppAccessCompany = {
 
 const APP_TIME_ZONE = "America/Panama";
 
+function parseAppDate(value: Date | string | number) {
+  if (value instanceof Date || typeof value === "number") {
+    return new Date(value);
+  }
+
+  const trimmed = value.trim();
+  const slashDate = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashDate) {
+    const [, day, month, year] = slashDate;
+    return new Date(
+      `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00`
+    );
+  }
+
+  return new Date(trimmed);
+}
+
 function getDateKeyInAppTimeZone(value: Date | string | number) {
-  const date = value instanceof Date ? value : new Date(value);
+  const date = parseAppDate(value);
   if (Number.isNaN(date.getTime())) return null;
 
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -94,12 +111,9 @@ export async function hasPendingYappyManualPayment(
 }
 
 export async function canAccessCompanyAppWithPendingYappy(
-  company: AppAccessCompany & { id: string },
-  client = createAdminClient()
+  company: AppAccessCompany & { id: string }
 ) {
-  if (canAccessCompanyApp(company)) return true;
-  if (company.is_blocked || !company.subscription_plan) return false;
-  return hasPendingYappyManualPayment(company.id, client);
+  return canAccessCompanyApp(company);
 }
 
 type MembershipWithCompany = {
@@ -150,7 +164,7 @@ export async function getCurrentUserAppEntryPath(currentUser?: {
   for (const membership of memberships) {
     const company = getCompany(membership.companies);
     if (!company) continue;
-    if (await canAccessCompanyAppWithPendingYappy(company, queryClient)) {
+    if (canAccessCompanyApp(company)) {
       validMembership = membership;
       break;
     }

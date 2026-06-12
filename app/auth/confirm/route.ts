@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "../../../lib/supabase/admin";
 import { createClient } from "../../../lib/supabase/server";
 import { isGlobalAdminEmail } from "../../../lib/admin-auth";
-import { canAccessCompanyAppWithPendingYappy } from "../../../lib/memberships/app-access";
+import { canAccessCompanyApp } from "../../../lib/memberships/app-access";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
   }
 
   const cookieStore = await cookies();
-  if (!company || !(await canAccessCompanyAppWithPendingYappy({ ...company, id: companyId }, adminClient))) {
+  if (!company || !canAccessCompanyApp(company)) {
     return NextResponse.redirect(new URL("/dashboard/mi-negocio?tab=cuenta", origin));
   }
 

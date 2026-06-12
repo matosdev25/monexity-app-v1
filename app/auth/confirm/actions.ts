@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { createClient } from "../../../lib/supabase/server";
 import { createAdminClient } from "../../../lib/supabase/admin";
 import { isGlobalAdminEmail } from "../../../lib/admin-auth";
-import { canAccessCompanyAppWithPendingYappy } from "../../../lib/memberships/app-access";
+import { canAccessCompanyApp } from "../../../lib/memberships/app-access";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
 export async function verifyEmailToken(
@@ -61,7 +61,7 @@ export async function verifyEmailToken(
     if (!plan) return { success: true, redirectTo: `/onboarding/plan?cid=${companyId}` };
 
     const cookieStore = await cookies();
-    if (!company || !(await canAccessCompanyAppWithPendingYappy({ ...company, id: companyId }, adminClient))) {
+    if (!company || !canAccessCompanyApp(company)) {
       return { success: true, redirectTo: "/dashboard/mi-negocio?tab=cuenta" };
     }
 

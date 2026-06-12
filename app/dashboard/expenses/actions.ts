@@ -7,7 +7,9 @@ import { createClient } from "../../../lib/supabase/server";
 import {
   SPECIAL_ADMIN_RELATED_ID,
   canEditManualTransactionDates,
+  isGlobalAdminEmail,
 } from "../../../lib/admin-auth";
+import { canAccessCompanyApp } from "../../../lib/memberships/app-access";
 import {
   getNextDocumentNumber,
   isDuplicateDocumentNumberError,
@@ -50,7 +52,7 @@ async function requireMembership() {
 
   const membershipQuery = supabase
     .from("memberships")
-    .select("company_id, role, companies(owner_user_id, name)")
+    .select("company_id, role, companies(owner_user_id, name, subscription_status, subscription_plan, trial_ends_at, current_period_ends_at, is_blocked)")
     .eq("user_id", user.id);
 
   const { data: membership, error } = await (
@@ -61,6 +63,22 @@ async function requireMembership() {
 
   if (error || !membership) {
     redirect("/auth/error?message=No se encontró membresía activa");
+  }
+
+  type MembershipCompany = {
+    owner_user_id?: string | null;
+    name?: string | null;
+    subscription_status: string | null;
+    subscription_plan: string | null;
+    trial_ends_at: string | null;
+    current_period_ends_at: string | null;
+    is_blocked: boolean | null;
+  };
+  const companies = membership.companies as unknown as MembershipCompany | MembershipCompany[] | null;
+  const company = Array.isArray(companies) ? companies[0] ?? null : companies;
+
+  if (!isGlobalAdminEmail(user.email) && (!company || !canAccessCompanyApp(company))) {
+    redirect("/dashboard/mi-negocio?tab=cuenta");
   }
 
   const { data: specialAdminMembership } = await supabase
@@ -79,12 +97,10 @@ async function requireMembership() {
       email: user.email,
       userId: user.id,
       companyId: membership.company_id,
-      companyOwnerUserId:
-        (membership.companies as { owner_user_id?: string | null } | null)?.owner_user_id ?? null,
+      companyOwnerUserId: company?.owner_user_id ?? null,
       hasSpecialAdminMembership: Boolean(specialAdminMembership?.company_id),
     }),
-    companyName:
-      (membership.companies as { name?: string | null } | null)?.name ?? null,
+    companyName: company?.name ?? null,
   };
 }
 

@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createClient } from "../../../lib/supabase/server";
+import { isGlobalAdminEmail } from "../../../lib/admin-auth";
+import { canAccessCompanyApp } from "../../../lib/memberships/app-access";
 import type { Product } from "./types";
 
 export type { Product } from "./types";
@@ -21,7 +23,7 @@ async function getInventoryContext() {
 
   const membershipQuery = supabase
     .from("memberships")
-    .select("company_id, role")
+    .select("company_id, role, companies(subscription_status, subscription_plan, trial_ends_at, current_period_ends_at, is_blocked)")
     .eq("user_id", user.id);
 
   const { data: membership } = await (
@@ -30,11 +32,24 @@ async function getInventoryContext() {
       : membershipQuery.limit(1)
   ).maybeSingle();
 
+  type MembershipCompany = {
+    subscription_status: string | null;
+    subscription_plan: string | null;
+    trial_ends_at: string | null;
+    current_period_ends_at: string | null;
+    is_blocked: boolean | null;
+  };
+  const companies = membership?.companies as unknown as MembershipCompany | MembershipCompany[] | null | undefined;
+  const company = Array.isArray(companies) ? companies[0] ?? null : companies;
+  const hasActiveAccess =
+    isGlobalAdminEmail(user.email) || Boolean(company && canAccessCompanyApp(company));
+
   return {
     supabase,
     userId: user.id,
     companyId: membership?.company_id ?? null,
     role: String(membership?.role ?? "").toLowerCase(),
+    hasActiveAccess,
   };
 }
 
@@ -80,8 +95,11 @@ export async function generateSkuAction(
   companyId: string,
   name: string
 ): Promise<string> {
-  const supabase = await createClient();
-  return generateUniqueSku(supabase, companyId, name.trim() || "PRD");
+  const ctx = await getInventoryContext();
+  if (!ctx.companyId || ctx.companyId !== companyId || !ctx.hasActiveAccess) {
+    return "";
+  }
+  return generateUniqueSku(ctx.supabase, companyId, name.trim() || "PRD");
 }
 
 export async function fetchProducts(companyId: string): Promise<Product[]> {
@@ -109,7 +127,7 @@ export async function fetchActiveProducts(companyId: string): Promise<Product[]>
 
 export async function createProduct(formData: FormData): Promise<ActionResult> {
   const ctx = await getInventoryContext();
-  if (!ctx.companyId || !ALLOWED_ROLES.has(ctx.role ?? ""))
+  if (!ctx.companyId || !ctx.hasActiveAccess || !ALLOWED_ROLES.has(ctx.role ?? ""))
     return { success: false, error: "Sin permisos." };
 
   const name = String(formData.get("name") ?? "").trim();
@@ -160,7 +178,7 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
 
 export async function updateProduct(formData: FormData): Promise<ActionResult> {
   const ctx = await getInventoryContext();
-  if (!ctx.companyId || !ALLOWED_ROLES.has(ctx.role ?? ""))
+  if (!ctx.companyId || !ctx.hasActiveAccess || !ALLOWED_ROLES.has(ctx.role ?? ""))
     return { success: false, error: "Sin permisos." };
 
   const id = String(formData.get("id") ?? "");
@@ -202,7 +220,7 @@ export async function updateProduct(formData: FormData): Promise<ActionResult> {
 
 export async function toggleProductActive(formData: FormData): Promise<void> {
   const ctx = await getInventoryContext();
-  if (!ctx.companyId || !ALLOWED_ROLES.has(ctx.role ?? "")) return;
+  if (!ctx.companyId || !ctx.hasActiveAccess || !ALLOWED_ROLES.has(ctx.role ?? "")) return;
 
   const id = String(formData.get("id") ?? "");
 
@@ -226,7 +244,7 @@ export async function toggleProductActive(formData: FormData): Promise<void> {
 
 export async function adjustStock(formData: FormData): Promise<ActionResult> {
   const ctx = await getInventoryContext();
-  if (!ctx.companyId || !ALLOWED_ROLES.has(ctx.role ?? ""))
+  if (!ctx.companyId || !ctx.hasActiveAccess || !ALLOWED_ROLES.has(ctx.role ?? ""))
     return { success: false, error: "Sin permisos." };
 
   const id = String(formData.get("id") ?? "");
@@ -260,7 +278,7 @@ export async function adjustStock(formData: FormData): Promise<ActionResult> {
 
 export async function deleteProduct(formData: FormData): Promise<void> {
   const ctx = await getInventoryContext();
-  if (!ctx.companyId || !ALLOWED_ROLES.has(ctx.role ?? "")) return;
+  if (!ctx.companyId || !ctx.hasActiveAccess || !ALLOWED_ROLES.has(ctx.role ?? "")) return;
 
   const id = String(formData.get("id") ?? "");
   await ctx.supabase

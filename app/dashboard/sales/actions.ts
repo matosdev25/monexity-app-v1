@@ -7,7 +7,9 @@ import { PAYMENT_METHODS, type PaymentMethodOptionFull } from "../../../lib/paym
 import {
   SPECIAL_ADMIN_RELATED_ID,
   canEditManualTransactionDates,
+  isGlobalAdminEmail,
 } from "../../../lib/admin-auth";
+import { canAccessCompanyApp } from "../../../lib/memberships/app-access";
 import {
   getNextDocumentNumber,
   isDuplicateDocumentNumberError,
@@ -226,7 +228,7 @@ async function getSalesContext() {
 
   const membershipQuery = supabase
     .from("memberships")
-    .select("company_id, role, companies(owner_user_id, name)")
+    .select("company_id, role, companies(owner_user_id, name, subscription_status, subscription_plan, trial_ends_at, current_period_ends_at, is_blocked)")
     .eq("user_id", user.id);
 
   const { data: membership, error: membershipError } = await (
@@ -244,6 +246,27 @@ async function getSalesContext() {
     };
   }
 
+  type MembershipCompany = {
+    owner_user_id?: string | null;
+    name?: string | null;
+    subscription_status: string | null;
+    subscription_plan: string | null;
+    trial_ends_at: string | null;
+    current_period_ends_at: string | null;
+    is_blocked: boolean | null;
+  };
+  const companies = membership.companies as unknown as MembershipCompany | MembershipCompany[] | null;
+  const company = Array.isArray(companies) ? companies[0] ?? null : companies;
+
+  if (!isGlobalAdminEmail(user.email) && (!company || !canAccessCompanyApp(company))) {
+    return {
+      supabase,
+      userId: user.id,
+      companyId: null,
+      error: "Tu cuenta necesita pago activo para usar ventas.",
+    };
+  }
+
   const { data: specialAdminMembership } = await supabase
     .from("memberships")
     .select("company_id")
@@ -258,9 +281,9 @@ async function getSalesContext() {
     companyId: membership.company_id,
     role: String(membership.role ?? "").toLowerCase(),
     companyOwnerUserId:
-      (membership.companies as { owner_user_id?: string | null } | null)?.owner_user_id ?? null,
+      company?.owner_user_id ?? null,
     companyName:
-      (membership.companies as { name?: string | null } | null)?.name ?? null,
+      company?.name ?? null,
     hasSpecialAdminMembership: Boolean(specialAdminMembership?.company_id),
     error: null,
   };
