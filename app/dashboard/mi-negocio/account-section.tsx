@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PLAN_MAP } from "../../../lib/plans/plans";
 import { formatShortDate } from "../../../lib/date-format";
+import { formatCurrency } from "../../../lib/currency-format";
 import { hasValidTrialToday, isTrialEndingToday } from "../../../lib/memberships/app-access";
 import { CancelMembershipButton } from "./cancel-membership-button";
 
@@ -21,8 +22,11 @@ type AccountSectionProps = {
   };
   latestPayment: {
     status: string;
+    provider: string | null;
+    plan_id: string | null;
     billing_cycle: string;
     exact_amount: number | string;
+    verified_at: string | null;
     created_at: string;
   } | null;
 };
@@ -40,6 +44,11 @@ const STATUS_LABELS: Record<string, string> = {
   canceled: "Cancelada",
 };
 
+const PAYMENT_PROVIDER_LABELS: Record<string, string> = {
+  paguelofacil: "PagueloFácil",
+  yappy_manual: "Yappy",
+};
+
 function formatDate(value: string | null) {
   return formatShortDate(value, "No definido");
 }
@@ -53,6 +62,19 @@ export function AccountSection({ companyId, canCancel, company, latestPayment }:
   const paymentStatus = latestPayment?.status
     ? STATUS_LABELS[latestPayment.status] ?? latestPayment.status
     : "Sin pago reciente";
+  const paymentProvider = latestPayment?.provider
+    ? PAYMENT_PROVIDER_LABELS[latestPayment.provider] ?? latestPayment.provider
+    : null;
+  const paymentPlan = latestPayment?.plan_id
+    ? PLAN_MAP[latestPayment.plan_id]?.name ?? latestPayment.plan_id
+    : null;
+  const paymentAmount =
+    latestPayment?.exact_amount != null
+      ? formatCurrency(Number(latestPayment.exact_amount))
+      : null;
+  const paymentDate = latestPayment
+    ? formatShortDate(latestPayment.verified_at ?? latestPayment.created_at, "Fecha pendiente")
+    : null;
   const isCancelled = ["cancelled", "canceled"].includes(status);
   const hasValidTrial = status === "trialing" && hasValidTrialToday(company.trial_ends_at);
   const trialEndsToday = status === "trialing" && isTrialEndingToday(company.trial_ends_at);
@@ -126,8 +148,16 @@ export function AccountSection({ companyId, canCancel, company, latestPayment }:
               Pago
             </p>
             <p className="mt-2 text-sm font-medium text-app">
-              {paymentStatus}
-              {latestPayment ? ` · ${cycle}` : ""}
+              {latestPayment
+                ? [
+                    paymentProvider,
+                    paymentStatus,
+                    paymentAmount,
+                    paymentDate,
+                    paymentPlan,
+                    cycle,
+                  ].filter(Boolean).join(" · ")
+                : paymentStatus}
             </p>
           </div>
         </div>

@@ -308,9 +308,11 @@ export default async function MiNegocioPage({
     const [{ data: latestPayment }, { data: subscriptionMetadata }] = await Promise.all([
       supabase
         .from("payment_intents")
-        .select("status, billing_cycle, exact_amount, created_at")
+        .select("status, provider, plan_id, billing_cycle, exact_amount, verified_at, created_at")
         .eq("company_id", membership.company_id)
-        .eq("provider", "paguelofacil")
+        .in("provider", ["paguelofacil", "yappy_manual"])
+        .eq("status", "paid")
+        .order("verified_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
