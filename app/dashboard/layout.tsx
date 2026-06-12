@@ -136,34 +136,36 @@ export default async function DashboardLayout({
 
   if (!canAccessActiveCompany) {
     if (activeRole === "owner") {
-      redirect("/dashboard/billing");
+      if (!isBillingPath) {
+        redirect("/dashboard/billing");
+      }
+    } else {
+      return (
+        <main className="h-dvh overflow-hidden text-app">
+          <section className="flex h-full w-full items-center justify-center p-4">
+            <div className="app-card max-w-md rounded-[28px] border border-app p-6 text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-soft">
+                Acceso pausado
+              </p>
+              <h1 className="mt-2 text-xl font-semibold tracking-tight text-app">
+                Contacta al dueño del negocio
+              </h1>
+              <p className="mt-2 text-sm leading-6 text-app-muted">
+                La membresía necesita atención. Solo el dueño puede gestionar el plan y los pagos de Monexity.
+              </p>
+              <form action={logout} className="mt-5">
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center rounded-full border border-app bg-transparent px-4 py-2 text-sm font-medium text-app-muted transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-app-muted/10 hover:text-app active:scale-[0.98] active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 motion-reduce:transition-none dark:focus-visible:ring-white/20"
+                >
+                  Cerrar sesión
+                </button>
+              </form>
+            </div>
+          </section>
+        </main>
+      );
     }
-
-    return (
-      <main className="h-dvh overflow-hidden text-app">
-        <section className="flex h-full w-full items-center justify-center p-4">
-          <div className="app-card max-w-md rounded-[28px] border border-app p-6 text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-soft">
-              Acceso pausado
-            </p>
-            <h1 className="mt-2 text-xl font-semibold tracking-tight text-app">
-              Contacta al dueño del negocio
-            </h1>
-            <p className="mt-2 text-sm leading-6 text-app-muted">
-              La membresía necesita atención. Solo el dueño puede gestionar el plan y los pagos de Monexity.
-            </p>
-            <form action={logout} className="mt-5">
-              <button
-                type="submit"
-                className="inline-flex items-center justify-center rounded-full border border-app bg-transparent px-4 py-2 text-sm font-medium text-app-muted transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-app-muted/10 hover:text-app active:scale-[0.98] active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 motion-reduce:transition-none dark:focus-visible:ring-white/20"
-              >
-                Cerrar sesión
-              </button>
-            </form>
-          </div>
-        </section>
-      </main>
-    );
   }
 
   const sellerAllowedPaths = ["/dashboard", "/dashboard/sales", "/dashboard/expenses"];
