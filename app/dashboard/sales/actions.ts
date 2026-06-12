@@ -808,7 +808,13 @@ export async function createSaleWithPlan(
   }
 
   const subtotal = parsedItems.subtotal;
-  const parsedPlan = parseInstallmentPlan(formData, subtotal);
+  const discountAmountRaw = getString(formData, "discountAmount");
+  const discountAmount = Math.max(0, roundMoney(parseMoney(discountAmountRaw)));
+  if (discountAmount > 0 && discountAmount >= subtotal) {
+    return fail("El descuento debe ser menor al total.");
+  }
+  const finalAmount = discountAmount > 0 ? roundMoney(subtotal - discountAmount) : subtotal;
+  const parsedPlan = parseInstallmentPlan(formData, finalAmount);
 
   if ("error" in parsedPlan) {
     return fail(parsedPlan.error);
@@ -825,7 +831,7 @@ export async function createSaleWithPlan(
     p_customer_name: customerName || null,
     p_customer_email: customerEmail || null,
     p_customer_phone: customerPhone || null,
-    p_amount: subtotal,
+    p_amount: finalAmount,
     p_payment_method: paymentMethod,
     p_payment_type: "installment",
     p_sale_date: saleDate,
@@ -860,7 +866,11 @@ export async function createSaleWithPlan(
     const invoiceNumberPlan = await getNextInvoiceNumber(context, attempt);
     const { error: updateNumberError } = await context.supabase
       .from("sales")
-      .update({ invoice_number: invoiceNumberPlan, customer_company: customerCompany || null })
+      .update({
+        invoice_number: invoiceNumberPlan,
+        customer_company: customerCompany || null,
+        discount_amount: discountAmount,
+      })
       .eq("id", saleId)
       .eq("company_id", context.companyId);
 

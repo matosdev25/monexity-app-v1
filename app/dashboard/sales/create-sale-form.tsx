@@ -501,42 +501,40 @@ export function CreateSaleForm({
           <input type="hidden" name="amount" value={rawAmount} />
         </div>
 
-        {/* Discount — hidden for installment */}
-        {!isInstallment ? (
-          <div className="space-y-1">
-            <label
-              htmlFor="discount_display"
-              className="block text-sm font-medium text-slate-500 dark:text-slate-300"
-            >
-              Descuento (opcional)
-            </label>
-            <input
-              id="discount_display"
-              type="text"
-              inputMode="decimal"
-              placeholder="$ 0.00"
-              value={rawDiscount ? formatAmountInput(rawDiscount) : ""}
-              onChange={(e) => setRawDiscount(normalizeAmountInput(e.target.value))}
-              className={inputClass}
-            />
-            {discountAmount > 0 && subtotalAmount > 0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-xs dark:border-slate-800 dark:bg-slate-900/60">
-                <div className="flex items-center justify-between gap-3 py-0.5 text-slate-500 dark:text-slate-400">
-                  <span>Subtotal</span>
-                  <span className="font-medium text-slate-900 dark:text-slate-100">{formatCurrency(subtotalAmount)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3 py-0.5 text-rose-500 dark:text-rose-400">
-                  <span>Descuento</span>
-                  <span className="font-medium">−{formatCurrency(discountAmount)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3 py-0.5 font-semibold text-slate-900 dark:text-slate-100">
-                  <span>Total</span>
-                  <span>{formatCurrency(totalAmount)}</span>
-                </div>
+        {/* Discount */}
+        <div className="space-y-1">
+          <label
+            htmlFor="discount_display"
+            className="block text-sm font-medium text-slate-500 dark:text-slate-300"
+          >
+            Descuento (opcional)
+          </label>
+          <input
+            id="discount_display"
+            type="text"
+            inputMode="decimal"
+            placeholder="$ 0.00"
+            value={rawDiscount ? formatAmountInput(rawDiscount) : ""}
+            onChange={(e) => setRawDiscount(normalizeAmountInput(e.target.value))}
+            className={inputClass}
+          />
+          {discountAmount > 0 && subtotalAmount > 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-2.5 text-xs dark:border-slate-800 dark:bg-slate-900/60">
+              <div className="flex items-center justify-between gap-3 py-0.5 text-slate-500 dark:text-slate-400">
+                <span>Subtotal</span>
+                <span className="font-medium text-slate-900 dark:text-slate-100">{formatCurrency(subtotalAmount)}</span>
               </div>
-            ) : null}
-          </div>
-        ) : null}
+              <div className="flex items-center justify-between gap-3 py-0.5 text-rose-500 dark:text-rose-400">
+                <span>Descuento</span>
+                <span className="font-medium">−{formatCurrency(discountAmount)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-0.5 font-semibold text-slate-900 dark:text-slate-100">
+                <span>Total</span>
+                <span>{formatCurrency(totalAmount)}</span>
+              </div>
+            </div>
+          ) : null}
+        </div>
 
         {/* Payment method + type */}
         <div className="grid gap-2 sm:grid-cols-2">
