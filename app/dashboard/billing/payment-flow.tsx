@@ -49,6 +49,10 @@ const PLAN_LEVELS: Record<string, number> = {
   equipo: 3,
 };
 
+const YAPPY_NUMBER = "6601-7105";
+const YAPPY_TERMS_TEXT =
+  "Acepto que he verificado el número de Yappy, el monto exacto y que mi pago será revisado manualmente. Entiendo que si envío datos incorrectos, el pago puede ser rechazado y no será devuelto automáticamente.";
+
 function formatDate(value: string | null) {
   if (!value) return "fecha pendiente";
   return formatShortDate(value, "fecha pendiente");
@@ -109,6 +113,8 @@ export function PaymentFlow({
   const [yappyLoading, setYappyLoading] = useState(false);
   const [yappyModalOpen, setYappyModalOpen] = useState(false);
   const [yappyFormError, setYappyFormError] = useState("");
+  const [acceptedYappyTerms, setAcceptedYappyTerms] = useState(false);
+  const [copiedYappyField, setCopiedYappyField] = useState<"number" | "amount" | null>(null);
   const [localYappyIntent, setLocalYappyIntent] = useState<IntentData | null>(pendingYappyIntent);
   const [now] = useState(() => Date.now());
 
@@ -187,6 +193,10 @@ export function PaymentFlow({
       setYappyFormError(phoneError || "Completa el nombre y número para registrar el pago.");
       return;
     }
+    if (!acceptedYappyTerms) {
+      setYappyFormError("Debes aceptar las condiciones del pago por Yappy antes de registrar el pago.");
+      return;
+    }
 
     setYappyLoading(true);
     setError(null);
@@ -200,7 +210,8 @@ export function PaymentFlow({
         yappySenderPhone,
         selectedPlan,
         billingCycle,
-        discountResult?.ok ? discountResult.code : undefined
+        discountResult?.ok ? discountResult.code : undefined,
+        acceptedYappyTerms
       );
 
       if (!result.success) {
@@ -218,6 +229,7 @@ export function PaymentFlow({
       });
       setMessage(result.message);
       setYappyModalOpen(false);
+      setAcceptedYappyTerms(false);
     } catch {
       setError("Error de conexión. Intenta nuevamente.");
     } finally {
@@ -352,6 +364,18 @@ export function PaymentFlow({
       setBillingCycle(currentBillingCycle ?? "monthly");
       setMessage("Cambio programado cancelado.");
     });
+  }
+
+  async function handleCopyYappyValue(field: "number" | "amount", value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedYappyField(field);
+      window.setTimeout(() => {
+        setCopiedYappyField((current) => (current === field ? null : current));
+      }, 1800);
+    } catch {
+      setYappyFormError("No se pudo copiar. Puedes copiarlo manualmente.");
+    }
   }
 
   return (
@@ -657,11 +681,52 @@ export function PaymentFlow({
                   </button>
                 </div>
 
-                <div className="mt-4 rounded-[20px] border border-sky-200 bg-sky-100 p-4 text-sm leading-6 text-sky-800 dark:border-cyan-500/35 dark:bg-cyan-950/80 dark:text-cyan-100">
-                  <p>Envía el pago por Yappy al 6601-7105.</p>
-                  <p className="mt-1 font-semibold">
-                    Monto a pagar: {formatCurrency(displayedFinalAmount)}
-                  </p>
+                <div className="mt-4 space-y-3 rounded-[20px] border border-sky-200 bg-sky-100 p-4 text-sm leading-6 text-sky-800 dark:border-cyan-500/35 dark:bg-cyan-950/80 dark:text-cyan-100">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700 dark:text-cyan-200">
+                      Yappy a este número:
+                    </p>
+                    <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-lg font-semibold tracking-tight">{YAPPY_NUMBER}</p>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyYappyValue("number", YAPPY_NUMBER)}
+                        className="rounded-[16px] border border-sky-300 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition-[background-color,border-color,color,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 dark:border-cyan-500/35 dark:bg-white/[0.06] dark:text-cyan-100 dark:hover:bg-cyan-500/10"
+                      >
+                        {copiedYappyField === "number" ? "Copiado" : "Copiar número"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-sky-200 pt-3 dark:border-cyan-500/25">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700 dark:text-cyan-200">
+                      Monto exacto a pagar:
+                    </p>
+                    <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-lg font-semibold tracking-tight">
+                        {formatCurrency(displayedFinalAmount)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyYappyValue("amount", displayedFinalAmount.toFixed(2))}
+                        className="rounded-[16px] border border-sky-300 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition-[background-color,border-color,color,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 dark:border-cyan-500/35 dark:bg-white/[0.06] dark:text-cyan-100 dark:hover:bg-cyan-500/10"
+                      >
+                        {copiedYappyField === "amount" ? "Copiado" : "Copiar monto"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-[20px] border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
+                  <p className="font-semibold">Importante antes de pagar por Yappy</p>
+                  <ul className="mt-2 space-y-1">
+                    <li>Verifica que el número de Yappy sea correcto antes de enviar el pago.</li>
+                    <li>Envía exactamente el monto indicado en esta pantalla.</li>
+                    <li>Si el nombre, número, referencia o monto enviado no coincide, el pago puede ser rechazado.</li>
+                    <li>Los pagos enviados con datos incorrectos no serán devueltos automáticamente.</li>
+                    <li>El pago será revisado manualmente antes de activar tu cuenta.</li>
+                    <li>Mientras el pago esté en revisión, tu cuenta aparecerá como “Pago pendiente de confirmación”.</li>
+                  </ul>
                 </div>
 
                 <div className="mt-4 grid gap-2">
@@ -699,6 +764,20 @@ export function PaymentFlow({
                   </p>
                 )}
 
+                <label className="mt-4 flex gap-3 rounded-[18px] border border-app bg-app-soft p-3 text-xs leading-5 text-app-muted">
+                  <input
+                    type="checkbox"
+                    checked={acceptedYappyTerms}
+                    onChange={(event) => {
+                      setAcceptedYappyTerms(event.target.checked);
+                      setYappyFormError("");
+                    }}
+                    disabled={Boolean(localYappyIntent) || yappyLoading}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-app text-sky-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                  <span>{YAPPY_TERMS_TEXT}</span>
+                </label>
+
                 <button
                   type="button"
                   onClick={handleYappyPayment}
@@ -707,16 +786,20 @@ export function PaymentFlow({
                     !canManage ||
                     hasCheckoutMinimumIssue ||
                     Boolean(localYappyIntent) ||
-                    !isYappyFormReady
+                    !isYappyFormReady ||
+                    !acceptedYappyTerms
                   }
                   className="mt-4 w-full rounded-[20px] bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 motion-reduce:transition-none dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
                 >
                   {localYappyIntent
-                    ? "Pago pendiente de revisión"
+                    ? "Pago pendiente de confirmación"
                     : yappyLoading
                       ? "Registrando..."
                       : "Registrar pago por Yappy"}
                 </button>
+                <p className="mt-2 text-center text-xs text-app-soft">
+                  Tu pago será revisado manualmente. Te avisaremos cuando sea confirmado.
+                </p>
               </div>
             </div>
           </div>
@@ -724,7 +807,7 @@ export function PaymentFlow({
       )}
 
       <p className="text-center text-xs text-app-soft">
-        Monexity no almacena datos de tarjeta.
+        MONEXITY no almacena datos de tarjeta.
       </p>
     </div>
   );

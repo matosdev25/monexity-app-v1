@@ -25,6 +25,9 @@ type YappyPaymentResult =
     }
   | { success: false; error: string };
 
+const YAPPY_TERMS_TEXT =
+  "Acepto que he verificado el número de Yappy, el monto exacto y que mi pago será revisado manualmente. Entiendo que si envío datos incorrectos, el pago puede ser rechazado y no será devuelto automáticamente.";
+
 async function canManageSubscription(companyId: string) {
   const supabase = await createClient();
   const {
@@ -153,7 +156,8 @@ export async function createYappyManualPayment(
   rawSenderPhone: string,
   selectedPlanId: string,
   selectedBillingCycle: BillingCycle,
-  rawDiscountCode?: string
+  rawDiscountCode?: string,
+  acceptedTerms = false
 ): Promise<YappyPaymentResult> {
   const supabase = await createClient();
   const {
@@ -172,6 +176,13 @@ export async function createYappyManualPayment(
   const role = String(membership?.role ?? "").toLowerCase();
   if (role !== "owner") {
     return { success: false, error: "No tienes permisos para gestionar la facturación." };
+  }
+
+  if (acceptedTerms !== true) {
+    return {
+      success: false,
+      error: "Debes aceptar las condiciones del pago por Yappy antes de registrar el pago.",
+    };
   }
 
   const senderName = rawSenderName.trim();
@@ -266,7 +277,7 @@ export async function createYappyManualPayment(
   if (existingIntent?.id) {
     return {
       success: true,
-      message: "Ya tienes un pago por Yappy pendiente de revisión.",
+      message: "Ya tienes un pago pendiente de confirmación.",
       intent: {
         id: existingIntent.id,
         exactAmount: Number(existingIntent.exact_amount),
@@ -296,6 +307,9 @@ export async function createYappyManualPayment(
         yappy_number: "6601-7105",
         sender_name: senderName,
         sender_phone: senderPhone,
+        accepted_terms: true,
+        accepted_terms_at: new Date().toISOString(),
+        accepted_terms_text: YAPPY_TERMS_TEXT,
         submitted_at: new Date().toISOString(),
       },
     })
@@ -308,7 +322,7 @@ export async function createYappyManualPayment(
 
   return {
     success: true,
-    message: "Pago por Yappy pendiente de revisión.",
+    message: "Pago pendiente de confirmación.",
     intent: {
       id: intent.id,
       exactAmount: Number(intent.exact_amount),
