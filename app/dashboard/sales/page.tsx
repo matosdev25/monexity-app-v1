@@ -18,6 +18,7 @@ import {
 } from "../../../lib/admin-auth";
 import { formatShortDate, formatTime } from "../../../lib/date-format";
 import { formatCurrency } from "../../../lib/currency-format";
+import { calculateSalePaymentSummary, roundMoney } from "./payment-summary";
 import type { Sale } from "./types";
 
 type SalesPageProps = {
@@ -131,26 +132,6 @@ function buildContactFooter(company: {
 
 function formatSaleTime(value: string | null | undefined) {
   return formatTime(value, "Sin hora");
-}
-
-function roundMoney(value: number) {
-  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
-}
-
-function getCollectedAmount(
-  sale: Sale,
-  paymentTotals: Map<string, number>,
-  downPaymentTotals: Map<string, number>
-) {
-  const total = roundMoney(Number(sale.amount ?? 0));
-  const storedPaid = roundMoney(Number(sale.paid_amount ?? 0));
-  const storedBalance = roundMoney(Number(sale.balance_due ?? total));
-  const paidFromBalance = roundMoney(Math.max(0, total - storedBalance));
-  const paidFromPayments = roundMoney(
-    (paymentTotals.get(sale.id) ?? 0) + (downPaymentTotals.get(sale.id) ?? 0)
-  );
-
-  return Math.min(total, Math.max(storedPaid, paidFromBalance, paidFromPayments));
 }
 
 const shellClass =
@@ -267,8 +248,8 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
     fetchActiveServices(companyId),
   ]);
 
-  const allSales = (sales ?? []) as Sale[];
-  const saleIds = allSales.map((sale) => sale.id).filter(Boolean);
+  const rawSales = (sales ?? []) as Sale[];
+  const saleIds = rawSales.map((sale) => sale.id).filter(Boolean);
   const [{ data: salePayments }, { data: salePaymentPlans }] = saleIds.length > 0
     ? await Promise.all([
         supabase
@@ -301,6 +282,26 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
     downPaymentTotals.set(saleId, roundMoney(Number(plan.down_payment_amount ?? 0)));
   }
 
+  const allSales = rawSales.map((sale) => {
+    const summary = calculateSalePaymentSummary({
+      sale,
+      paymentsAmount: paymentTotals.get(sale.id) ?? 0,
+      downPaymentAmount: downPaymentTotals.get(sale.id) ?? 0,
+    });
+
+    return {
+      ...sale,
+      paid_amount: summary.collectedAmount,
+      balance_due: summary.pendingBalance,
+      payment_status:
+        summary.pendingBalance <= 0
+          ? "paid"
+          : summary.collectedAmount > 0
+            ? "partial"
+            : sale.payment_status,
+    } satisfies Sale;
+  });
+
   // Filtrar por estado en la vista principal
   const visibleSales = allSales.filter((sale) => {
     if (statusParam === "all") return true;
@@ -317,12 +318,12 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
   );
 
   const totalCollected = allSales.reduce(
-    (sum, sale) => sum + getCollectedAmount(sale, paymentTotals, downPaymentTotals),
+    (sum, sale) => sum + Number(sale.paid_amount ?? 0),
     0
   );
 
   const totalPendingBalance = allSales.reduce(
-    (sum, sale) => sum + Math.max(0, Number(sale.amount ?? 0) - getCollectedAmount(sale, paymentTotals, downPaymentTotals)),
+    (sum, sale) => sum + Number(sale.balance_due ?? 0),
     0
   );
 

@@ -10,6 +10,7 @@ import type { Sale } from "./types";
 import { generateReceiptPdf } from "./record-payment-modal";
 import type { ReceiptSnapshot } from "./record-payment-modal";
 import { PAYMENT_METHODS } from "../../../lib/payments";
+import { calculateSalePaymentSummary } from "./payment-summary";
 
 type PaymentRow = {
   id: string;
@@ -30,10 +31,6 @@ type Company = {
 type RowMode = "idle" | "editing" | "confirm-delete";
 
 function fmt$(v: number) { return formatCurrency(v); }
-
-function roundMoney(value: number) {
-  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
-}
 
 function fmtMethod(value: string | null) {
   switch ((value ?? "").toLowerCase()) {
@@ -215,18 +212,18 @@ export function SaleDetailModal({ sale, company, canManagePayments = true }: Pro
     }
   }
 
-  const gross = roundMoney(Number(sale.amount ?? 0));
-  const storedPaid = roundMoney(Number(sale.paid_amount ?? 0));
-  const storedBalance = roundMoney(Number(sale.balance_due ?? gross));
-  const paidFromBalance = roundMoney(Math.max(0, gross - storedBalance));
-  const paidFromPayments = roundMoney(
-    payments.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0)
-  );
-  const livePaid = Math.min(
-    gross,
-    Math.max(storedPaid, paidFromBalance, paidFromPayments)
-  );
-  const liveBalance = roundMoney(Math.max(0, gross - livePaid));
+  const paymentSummary = calculateSalePaymentSummary({
+    sale,
+    paymentsAmount: payments.reduce(
+      (sum, payment) => sum + (payment.is_initial_down_payment ? 0 : Number(payment.amount ?? 0)),
+      0
+    ),
+    downPaymentAmount:
+      payments.find((payment) => payment.is_initial_down_payment)?.amount ?? 0,
+  });
+  const gross = paymentSummary.total;
+  const livePaid = paymentSummary.collectedAmount;
+  const liveBalance = paymentSummary.pendingBalance;
 
   const modalContent =
     open

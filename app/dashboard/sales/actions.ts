@@ -14,6 +14,7 @@ import {
   getNextDocumentNumber,
   isDuplicateDocumentNumberError,
 } from "../../../lib/document-numbering";
+import { calculateSalePaymentSummary } from "./payment-summary";
 
 type ActionState = {
   success: boolean;
@@ -1473,18 +1474,16 @@ async function recalcSaleTotals(
 
   if (!sale) return;
 
-  const subtotal = roundMoney(Number(sale.amount ?? 0));
-  const isInstallmentSale =
-    String(sale.payment_type ?? "").toLowerCase() === "installment" ||
-    Boolean(sale.has_payment_plan);
-  const downPaymentAmount = isInstallmentSale
-    ? roundMoney(Number(plan?.down_payment_amount ?? 0))
-    : 0;
   const laterPaymentsAmount = roundMoney(
     (payments ?? []).reduce((s: number, r: { amount: unknown }) => s + Number(r.amount ?? 0), 0)
   );
-  const paidAmount = roundMoney(Math.min(subtotal, downPaymentAmount + laterPaymentsAmount));
-  const balanceDue = roundMoney(Math.max(0, subtotal - paidAmount));
+  const paymentSummary = calculateSalePaymentSummary({
+    sale,
+    paymentsAmount: laterPaymentsAmount,
+    downPaymentAmount: Number(plan?.down_payment_amount ?? 0),
+  });
+  const paidAmount = paymentSummary.collectedAmount;
+  const balanceDue = paymentSummary.pendingBalance;
   const paymentStatus = balanceDue <= 0 ? "paid" : paidAmount > 0 ? "partial" : "pending";
 
   await supabase
