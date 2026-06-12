@@ -29,6 +29,15 @@ type AccountSectionProps = {
     verified_at: string | null;
     created_at: string;
   } | null;
+  pendingYappyPayment: {
+    status: string;
+    provider: string | null;
+    plan_id: string | null;
+    billing_cycle: string;
+    exact_amount: number | string;
+    verified_at: string | null;
+    created_at: string;
+  } | null;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -38,6 +47,7 @@ const STATUS_LABELS: Record<string, string> = {
   active: "Activa",
   paid: "Pagada",
   failed: "Fallida",
+  manual_review: "Pago pendiente de confirmación",
   cancelled: "Cancelada",
   expired: "Expirada",
   inactive: "Inactiva",
@@ -53,27 +63,28 @@ function formatDate(value: string | null) {
   return formatShortDate(value, "No definido");
 }
 
-export function AccountSection({ companyId, canCancel, company, latestPayment }: AccountSectionProps) {
+export function AccountSection({ companyId, canCancel, company, latestPayment, pendingYappyPayment }: AccountSectionProps) {
   const plan = company.subscription_plan ? PLAN_MAP[company.subscription_plan] : null;
   const status = company.subscription_status ?? "inactive";
+  const visiblePayment = pendingYappyPayment ?? latestPayment;
   const cycle = company.subscription_billing_cycle
     ? company.subscription_billing_cycle === "annual" ? "Anual" : "Mensual"
     : "Ciclo no definido";
-  const paymentStatus = latestPayment?.status
-    ? STATUS_LABELS[latestPayment.status] ?? latestPayment.status
+  const paymentStatus = visiblePayment?.status
+    ? STATUS_LABELS[visiblePayment.status] ?? visiblePayment.status
     : "Sin pago reciente";
-  const paymentProvider = latestPayment?.provider
-    ? PAYMENT_PROVIDER_LABELS[latestPayment.provider] ?? latestPayment.provider
+  const paymentProvider = visiblePayment?.provider
+    ? PAYMENT_PROVIDER_LABELS[visiblePayment.provider] ?? visiblePayment.provider
     : null;
-  const paymentPlan = latestPayment?.plan_id
-    ? PLAN_MAP[latestPayment.plan_id]?.name ?? latestPayment.plan_id
+  const paymentPlan = visiblePayment?.plan_id
+    ? PLAN_MAP[visiblePayment.plan_id]?.name ?? visiblePayment.plan_id
     : null;
   const paymentAmount =
-    latestPayment?.exact_amount != null
-      ? formatCurrency(Number(latestPayment.exact_amount))
+    visiblePayment?.exact_amount != null
+      ? formatCurrency(Number(visiblePayment.exact_amount))
       : null;
-  const paymentDate = latestPayment
-    ? formatShortDate(latestPayment.verified_at ?? latestPayment.created_at, "Fecha pendiente")
+  const paymentDate = visiblePayment
+    ? formatShortDate(visiblePayment.verified_at ?? visiblePayment.created_at, "Fecha pendiente")
     : null;
   const isCancelled = ["cancelled", "canceled"].includes(status);
   const isTrialing = status === "trialing";
@@ -151,7 +162,7 @@ export function AccountSection({ companyId, canCancel, company, latestPayment }:
               Pago
             </p>
             <p className="mt-2 text-sm font-medium text-app">
-              {latestPayment
+              {visiblePayment
                 ? [
                     paymentProvider,
                     paymentStatus,

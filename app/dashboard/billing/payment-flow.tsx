@@ -398,8 +398,8 @@ export function PaymentFlow({
 
       {yappyIntentMatchesSelection && localYappyIntent && (
         <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
-          <p className="font-semibold">Pago por Yappy pendiente de revisión.</p>
-          <p>Cuando el pago sea confirmado, activaremos tu membresía.</p>
+          <p className="font-semibold">Pago pendiente de confirmación</p>
+          <p>Estamos revisando tu pago por Yappy. Te avisaremos cuando sea aprobado.</p>
           <p className="mt-1 text-xs">
             Monto reportado: {formatCurrency(localYappyIntent.exactAmount)}
           </p>

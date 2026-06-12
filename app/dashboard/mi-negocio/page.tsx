@@ -305,7 +305,17 @@ export default async function MiNegocioPage({
   }
 
   if (tab === "cuenta" && isOwner) {
-    const [{ data: latestPayment }, { data: subscriptionMetadata }] = await Promise.all([
+    const [{ data: pendingYappyPayment }, { data: latestPayment }, { data: subscriptionMetadata }] = await Promise.all([
+      supabase
+        .from("payment_intents")
+        .select("status, provider, plan_id, billing_cycle, exact_amount, verified_at, created_at")
+        .eq("company_id", membership.company_id)
+        .eq("provider", "yappy_manual")
+        .eq("status", "manual_review")
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
       supabase
         .from("payment_intents")
         .select("status, provider, plan_id, billing_cycle, exact_amount, verified_at, created_at")
@@ -340,6 +350,7 @@ export default async function MiNegocioPage({
           subscription_cancel_at_period_end: Boolean(subscriptionMetadata?.subscription_cancel_at_period_end),
         }}
         latestPayment={latestPayment ?? null}
+        pendingYappyPayment={pendingYappyPayment ?? null}
       />
     );
   }

@@ -131,7 +131,11 @@ export default async function BillingPage({
   const hasValidTrial = isTrialing && hasValidTrialToday(trialEnd);
   const trialEnded = isTrialing && !hasValidTrial;
   const trialEndsToday = isTrialing && isTrialEndingToday(trialEnd);
-  const statusLabel = trialEnded ? "Prueba vencida" : STATUS_LABELS[status] ?? status;
+  const statusLabel = yappyIntent
+    ? "Pago pendiente de confirmación"
+    : trialEnded
+    ? "Prueba vencida"
+    : STATUS_LABELS[status] ?? status;
   const needsPayment = !hasPaidAccess && !hasValidTrial;
   const currentPlanName = PLAN_LABELS[planId ?? ""] ?? "seleccionado";
   const updatedTrialPlanName = params.trialPlanUpdated
@@ -199,8 +203,8 @@ export default async function BillingPage({
 
       {yappyIntent && (
         <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium leading-6 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
-          <p>Pago por Yappy pendiente de revisión.</p>
-          <p className="font-normal">Cuando el pago sea confirmado, activaremos tu membresía.</p>
+          <p>Pago pendiente de confirmación</p>
+          <p className="font-normal">Estamos revisando tu pago por Yappy. Te avisaremos cuando sea aprobado.</p>
         </div>
       )}
 
