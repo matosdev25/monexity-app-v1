@@ -44,6 +44,24 @@ export default async function LoginPage({
             <LoginForm />
           </div>
         </div>
+
+        <nav className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs" aria-label="Legal">
+          {[
+            { label: "Términos", href: "/legal/terminos" },
+            { label: "Privacidad", href: "/legal/privacidad" },
+            { label: "Cookies", href: "/legal/cookies" },
+            { label: "Pagos", href: "/legal/pagos" },
+            { label: "Aviso legal", href: "/legal/aviso-legal" },
+          ].map(({ label, href }) => (
+            <Link
+              key={label}
+              href={href}
+              className="text-slate-400 transition-colors duration-180 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-slate-500 dark:hover:text-slate-300"
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
       </div>
     </main>
   );

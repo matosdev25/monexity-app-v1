@@ -592,6 +592,11 @@ function LandingFooter() {
             { label: "Funciones", href: "#funciones" },
             { label: "Planes", href: "#planes" },
             { label: "FAQ", href: "#faq" },
+            { label: "Términos", href: "/legal/terminos" },
+            { label: "Privacidad", href: "/legal/privacidad" },
+            { label: "Cookies", href: "/legal/cookies" },
+            { label: "Pagos", href: "/legal/pagos" },
+            { label: "Aviso legal", href: "/legal/aviso-legal" },
             { label: "WhatsApp", href: WHATSAPP_HREF },
             { label: "Iniciar sesión", href: LOGIN_HREF },
           ].map(({ label, href }) => (

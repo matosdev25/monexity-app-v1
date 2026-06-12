@@ -5,6 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const WAITLIST_MODE = process.env.WAITLIST_MODE === "true";
 
 const PUBLIC_ROUTES = [
+  "/legal",
   "/auth/login",
   "/auth/sign-up",
   "/auth/check-email",
@@ -24,6 +25,7 @@ export async function middleware(request: NextRequest) {
   if (WAITLIST_MODE) {
     const allowed =
       pathname === "/" ||
+      pathname.startsWith("/legal") ||
       pathname.startsWith("/api/waitlist") ||
       pathname.startsWith("/_next") ||
       pathname.startsWith("/logo") ||
