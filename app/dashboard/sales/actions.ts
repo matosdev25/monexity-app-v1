@@ -21,6 +21,16 @@ type ActionState = {
   timestamp?: number;
 };
 
+type SalePaymentRow = {
+  id: string;
+  amount: number;
+  payment_method: string | null;
+  payment_date: string;
+  note: string | null;
+  created_at: string | null;
+  is_initial_down_payment?: boolean;
+};
+
 type SaleItemInput = {
   description: string;
   quantity: number;
@@ -1327,25 +1337,32 @@ export async function fetchSaleItems(saleId: string): Promise<{
   }));
 }
 
-export async function fetchSalePayments(saleId: string): Promise<{
-  id: string;
-  amount: number;
-  payment_method: string | null;
-  payment_date: string;
-  note: string | null;
-  created_at: string | null;
-}[]> {
+export async function fetchSalePayments(saleId: string): Promise<SalePaymentRow[]> {
   const context = await getSalesContext();
   if (context.error || !context.companyId || !saleId) return [];
 
-  const { data } = await context.supabase
-    .from("sale_payments")
-    .select("id, amount, payment_method, payment_date, note, created_at")
-    .eq("sale_id", saleId)
-    .eq("company_id", context.companyId)
-    .order("payment_date", { ascending: true });
+  const [{ data }, { data: sale }, { data: plan }] = await Promise.all([
+    context.supabase
+      .from("sale_payments")
+      .select("id, amount, payment_method, payment_date, note, created_at")
+      .eq("sale_id", saleId)
+      .eq("company_id", context.companyId)
+      .order("payment_date", { ascending: true }),
+    context.supabase
+      .from("sales")
+      .select("payment_method, payment_date, sale_date, payment_type, has_payment_plan")
+      .eq("id", saleId)
+      .eq("company_id", context.companyId)
+      .maybeSingle(),
+    context.supabase
+      .from("sale_payment_plans")
+      .select("down_payment_amount")
+      .eq("sale_id", saleId)
+      .eq("company_id", context.companyId)
+      .maybeSingle(),
+  ]);
 
-  return (data ?? []).map((row) => ({
+  const rows: SalePaymentRow[] = (data ?? []).map((row) => ({
     id: String(row.id),
     amount: Number(row.amount ?? 0),
     payment_method: row.payment_method as string | null,
@@ -1353,6 +1370,25 @@ export async function fetchSalePayments(saleId: string): Promise<{
     note: row.note as string | null,
     created_at: row.created_at as string | null,
   }));
+
+  const isInstallmentSale =
+    String(sale?.payment_type ?? "").toLowerCase() === "installment" ||
+    Boolean(sale?.has_payment_plan);
+  const downPaymentAmount = roundMoney(Number(plan?.down_payment_amount ?? 0));
+
+  if (isInstallmentSale && downPaymentAmount > 0) {
+    rows.unshift({
+      id: `down-payment:${saleId}`,
+      amount: downPaymentAmount,
+      payment_method: (sale?.payment_method as string | null) ?? null,
+      payment_date: String(sale?.payment_date ?? sale?.sale_date ?? ""),
+      note: "Abono inicial",
+      created_at: null,
+      is_initial_down_payment: true,
+    });
+  }
+
+  return rows;
 }
 
 export async function recordPayment(
@@ -1415,10 +1451,10 @@ async function recalcSaleTotals(
   saleId: string,
   companyId: string
 ): Promise<void> {
-  const [{ data: sale }, { data: payments }] = await Promise.all([
+  const [{ data: sale }, { data: payments }, { data: plan }] = await Promise.all([
     supabase
       .from("sales")
-      .select("amount")
+      .select("amount, payment_type, has_payment_plan")
       .eq("id", saleId)
       .eq("company_id", companyId)
       .single(),
@@ -1427,14 +1463,27 @@ async function recalcSaleTotals(
       .select("amount")
       .eq("sale_id", saleId)
       .eq("company_id", companyId),
+    supabase
+      .from("sale_payment_plans")
+      .select("down_payment_amount")
+      .eq("sale_id", saleId)
+      .eq("company_id", companyId)
+      .maybeSingle(),
   ]);
 
   if (!sale) return;
 
-  const paidAmount = roundMoney(
+  const subtotal = roundMoney(Number(sale.amount ?? 0));
+  const isInstallmentSale =
+    String(sale.payment_type ?? "").toLowerCase() === "installment" ||
+    Boolean(sale.has_payment_plan);
+  const downPaymentAmount = isInstallmentSale
+    ? roundMoney(Number(plan?.down_payment_amount ?? 0))
+    : 0;
+  const laterPaymentsAmount = roundMoney(
     (payments ?? []).reduce((s: number, r: { amount: unknown }) => s + Number(r.amount ?? 0), 0)
   );
-  const subtotal = roundMoney(Number(sale.amount ?? 0));
+  const paidAmount = roundMoney(Math.min(subtotal, downPaymentAmount + laterPaymentsAmount));
   const balanceDue = roundMoney(Math.max(0, subtotal - paidAmount));
   const paymentStatus = balanceDue <= 0 ? "paid" : paidAmount > 0 ? "partial" : "pending";
 

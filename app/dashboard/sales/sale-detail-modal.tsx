@@ -18,6 +18,7 @@ type PaymentRow = {
   payment_date: string;
   note: string | null;
   created_at: string | null;
+  is_initial_down_payment?: boolean;
 };
 
 type Company = {
@@ -318,6 +319,8 @@ export function SaleDetailModal({ sale, company, canManagePayments = true }: Pro
                           const ev = editValues[payment.id];
                           const busy = actionBusy === payment.id;
                           const err = actionErrors[payment.id] ?? "";
+                          const canEditThisPayment =
+                            canManagePayments && !payment.is_initial_down_payment;
 
                           return (
                             <div
@@ -361,7 +364,7 @@ export function SaleDetailModal({ sale, company, canManagePayments = true }: Pro
                                       PDF
                                     </button>
 
-                                    {canManagePayments && (
+                                    {canEditThisPayment && (
                                       <>
                                         {/* Edit */}
                                         <button

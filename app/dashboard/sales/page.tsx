@@ -137,12 +137,18 @@ function roundMoney(value: number) {
   return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 }
 
-function getCollectedAmount(sale: Sale, paymentTotals: Map<string, number>) {
+function getCollectedAmount(
+  sale: Sale,
+  paymentTotals: Map<string, number>,
+  downPaymentTotals: Map<string, number>
+) {
   const total = roundMoney(Number(sale.amount ?? 0));
   const storedPaid = roundMoney(Number(sale.paid_amount ?? 0));
   const storedBalance = roundMoney(Number(sale.balance_due ?? total));
   const paidFromBalance = roundMoney(Math.max(0, total - storedBalance));
-  const paidFromPayments = roundMoney(paymentTotals.get(sale.id) ?? 0);
+  const paidFromPayments = roundMoney(
+    (paymentTotals.get(sale.id) ?? 0) + (downPaymentTotals.get(sale.id) ?? 0)
+  );
 
   return Math.min(total, Math.max(storedPaid, paidFromBalance, paidFromPayments));
 }
@@ -263,13 +269,20 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
 
   const allSales = (sales ?? []) as Sale[];
   const saleIds = allSales.map((sale) => sale.id).filter(Boolean);
-  const { data: salePayments } = saleIds.length > 0
-    ? await supabase
-        .from("sale_payments")
-        .select("sale_id, amount")
-        .eq("company_id", companyId)
-        .in("sale_id", saleIds)
-    : { data: [] };
+  const [{ data: salePayments }, { data: salePaymentPlans }] = saleIds.length > 0
+    ? await Promise.all([
+        supabase
+          .from("sale_payments")
+          .select("sale_id, amount")
+          .eq("company_id", companyId)
+          .in("sale_id", saleIds),
+        supabase
+          .from("sale_payment_plans")
+          .select("sale_id, down_payment_amount")
+          .eq("company_id", companyId)
+          .in("sale_id", saleIds),
+      ])
+    : [{ data: [] }, { data: [] }];
 
   const paymentTotals = new Map<string, number>();
   for (const payment of salePayments ?? []) {
@@ -279,6 +292,13 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
       saleId,
       roundMoney((paymentTotals.get(saleId) ?? 0) + Number(payment.amount ?? 0))
     );
+  }
+
+  const downPaymentTotals = new Map<string, number>();
+  for (const plan of salePaymentPlans ?? []) {
+    const saleId = String(plan.sale_id ?? "");
+    if (!saleId) continue;
+    downPaymentTotals.set(saleId, roundMoney(Number(plan.down_payment_amount ?? 0)));
   }
 
   // Filtrar por estado en la vista principal
@@ -297,12 +317,12 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
   );
 
   const totalCollected = allSales.reduce(
-    (sum, sale) => sum + getCollectedAmount(sale, paymentTotals),
+    (sum, sale) => sum + getCollectedAmount(sale, paymentTotals, downPaymentTotals),
     0
   );
 
   const totalPendingBalance = allSales.reduce(
-    (sum, sale) => sum + Math.max(0, Number(sale.amount ?? 0) - getCollectedAmount(sale, paymentTotals)),
+    (sum, sale) => sum + Math.max(0, Number(sale.amount ?? 0) - getCollectedAmount(sale, paymentTotals, downPaymentTotals)),
     0
   );
 
