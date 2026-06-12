@@ -21,6 +21,62 @@ export type CompanyOption = {
   logoUrl: string | null;
 };
 
+function PausedAccessScreen() {
+  return (
+    <main className="h-dvh overflow-hidden text-app">
+      <section className="flex h-full w-full items-center justify-center p-4">
+        <div className="app-card max-w-md rounded-[28px] border border-app p-6 text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-soft">
+            Acceso pausado
+          </p>
+          <h1 className="mt-2 text-xl font-semibold tracking-tight text-app">
+            Contacta al dueño del negocio
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-app-muted">
+            La membresía necesita atención. Solo el dueño puede gestionar el plan y los pagos de Monexity.
+          </p>
+          <form action={logout} className="mt-5">
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center rounded-full border border-app bg-transparent px-4 py-2 text-sm font-medium text-app-muted transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-app-muted/10 hover:text-app active:scale-[0.98] active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 motion-reduce:transition-none dark:focus-visible:ring-white/20"
+            >
+              Cerrar sesión
+            </button>
+          </form>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function BillingAccessShell({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="h-dvh overflow-hidden text-app">
+      <InactivityLogout />
+      <section className="h-full w-full p-2 sm:p-3">
+        <div className="relative app-panel flex h-full min-h-0 flex-col rounded-[28px] px-3 pb-3 sm:px-4 sm:pb-4 lg:px-5 lg:pb-5">
+          <div className="flex h-12 shrink-0 items-center justify-end">
+            <form action={logout}>
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center rounded-full border border-app bg-transparent px-4 py-2 text-sm font-medium text-app-muted transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-app-muted/10 hover:text-app active:scale-[0.98] active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 motion-reduce:transition-none dark:focus-visible:ring-white/20"
+              >
+                Cerrar sesión
+              </button>
+            </form>
+          </div>
+          <div
+            data-scroll-container
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-0 md:pt-2 sm:pt-3"
+          >
+            <Suspense fallback={null}>{children}</Suspense>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -48,7 +104,7 @@ export default async function DashboardLayout({
 
   const { data: membershipsRaw, error: membershipsError } = await supabase
     .from("memberships")
-    .select("company_id, role, companies(id, name, logo_url, subscription_status, subscription_plan, trial_ends_at, current_period_ends_at, is_blocked, needs_inventory)")
+    .select("company_id, role, companies(id, name, logo_url, subscription_status, subscription_plan, trial_ends_at, current_period_ends_at, subscription_cancel_at_period_end, is_blocked, needs_inventory)")
     .eq("user_id", user.id);
 
   if (membershipsError) {
@@ -71,6 +127,7 @@ export default async function DashboardLayout({
     subscription_plan: string | null;
     trial_ends_at: string | null;
     current_period_ends_at: string | null;
+    subscription_cancel_at_period_end: boolean | null;
     is_blocked: boolean | null;
     needs_inventory: boolean | null;
   };
@@ -97,16 +154,22 @@ export default async function DashboardLayout({
     ? companiesData.find((c) => c.id === cookieCompanyId) ?? null
     : null;
 
-  const validPendingCompany = await (async () => {
+  const validAccessCompany =
+    companiesData.find((company) => canAccessCompanyApp(company)) ?? null;
+
+  let validPendingCompany: CompanyRow | null = null;
+  if (!validCookieCompany && !validAccessCompany) {
     for (const company of companiesData) {
-      if (await canAccessCompanyAppWithPendingYappy(company)) return company;
+      if (await canAccessCompanyAppWithPendingYappy(company)) {
+        validPendingCompany = company;
+        break;
+      }
     }
-    return null;
-  })();
+  }
 
   const activeCompany =
     validCookieCompany ??
-    companiesData.find((company) => canAccessCompanyApp(company)) ??
+    validAccessCompany ??
     validPendingCompany ??
     companiesData[0];
 
@@ -127,45 +190,24 @@ export default async function DashboardLayout({
     redirect(`/onboarding/plan?cid=${activeCompany.id}`);
   }
 
-  const canAccessActiveCompany = await canAccessCompanyAppWithPendingYappy(activeCompany);
+  const canAccessActiveCompany =
+    isGlobalAdmin || (await canAccessCompanyAppWithPendingYappy(activeCompany));
   const activeRole = String(activeMembership?.role ?? "").toLowerCase();
+
+  if (!canAccessActiveCompany) {
+    if (!isBillingPath) {
+      redirect("/dashboard/billing");
+    }
+
+    if (activeRole !== "owner") {
+      return <PausedAccessScreen />;
+    }
+
+    return <BillingAccessShell>{children}</BillingAccessShell>;
+  }
 
   if (isBillingPath && activeRole !== "owner") {
     redirect("/dashboard");
-  }
-
-  if (!canAccessActiveCompany) {
-    if (activeRole === "owner") {
-      if (!isBillingPath) {
-        redirect("/dashboard/billing");
-      }
-    } else {
-      return (
-        <main className="h-dvh overflow-hidden text-app">
-          <section className="flex h-full w-full items-center justify-center p-4">
-            <div className="app-card max-w-md rounded-[28px] border border-app p-6 text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-app-soft">
-                Acceso pausado
-              </p>
-              <h1 className="mt-2 text-xl font-semibold tracking-tight text-app">
-                Contacta al dueño del negocio
-              </h1>
-              <p className="mt-2 text-sm leading-6 text-app-muted">
-                La membresía necesita atención. Solo el dueño puede gestionar el plan y los pagos de Monexity.
-              </p>
-              <form action={logout} className="mt-5">
-                <button
-                  type="submit"
-                  className="inline-flex items-center justify-center rounded-full border border-app bg-transparent px-4 py-2 text-sm font-medium text-app-muted transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-app-muted/10 hover:text-app active:scale-[0.98] active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 motion-reduce:transition-none dark:focus-visible:ring-white/20"
-                >
-                  Cerrar sesión
-                </button>
-              </form>
-            </div>
-          </section>
-        </main>
-      );
-    }
   }
 
   const sellerAllowedPaths = ["/dashboard", "/dashboard/sales", "/dashboard/expenses"];
