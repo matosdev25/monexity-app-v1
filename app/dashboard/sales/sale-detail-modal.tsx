@@ -30,6 +30,10 @@ type RowMode = "idle" | "editing" | "confirm-delete";
 
 function fmt$(v: number) { return formatCurrency(v); }
 
+function roundMoney(value: number) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
 function fmtMethod(value: string | null) {
   switch ((value ?? "").toLowerCase()) {
     case "cash": return "Efectivo";
@@ -191,7 +195,7 @@ export function SaleDetailModal({ sale, company, canManagePayments = true }: Pro
         methodLabel: fmtMethod(payment.payment_method),
         paymentDate: payment.payment_date,
         note: payment.note ?? "",
-        newBalance: Math.max(0, Number(sale.balance_due ?? 0)),
+        newBalance: liveBalance,
         companyName: company?.name ?? "Mi negocio",
         contactFooter: company?.contactFooter ?? "",
         logoUrl: company?.logoUrl ?? null,
@@ -210,13 +214,18 @@ export function SaleDetailModal({ sale, company, canManagePayments = true }: Pro
     }
   }
 
-  const gross = Number(sale.amount ?? 0);
-  const discount = Number(sale.discount_amount ?? 0);
-  const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
-  const livePaid = payments.length > 0 ? totalPaid : Number(sale.paid_amount ?? 0);
-  const liveBalance = payments.length > 0
-    ? Math.max(0, gross - discount - totalPaid)
-    : Number(sale.balance_due ?? 0);
+  const gross = roundMoney(Number(sale.amount ?? 0));
+  const storedPaid = roundMoney(Number(sale.paid_amount ?? 0));
+  const storedBalance = roundMoney(Number(sale.balance_due ?? gross));
+  const paidFromBalance = roundMoney(Math.max(0, gross - storedBalance));
+  const paidFromPayments = roundMoney(
+    payments.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0)
+  );
+  const livePaid = Math.min(
+    gross,
+    Math.max(storedPaid, paidFromBalance, paidFromPayments)
+  );
+  const liveBalance = roundMoney(Math.max(0, gross - livePaid));
 
   const modalContent =
     open
@@ -494,7 +503,7 @@ export function SaleDetailModal({ sale, company, canManagePayments = true }: Pro
 
                         <div className="flex items-center justify-between border-t border-slate-200 pt-2 dark:border-slate-700">
                           <span className="text-sm text-slate-500 dark:text-slate-400">Total registrado</span>
-                          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{fmt$(totalPaid)}</span>
+                          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{fmt$(livePaid)}</span>
                         </div>
                       </div>
                     )}

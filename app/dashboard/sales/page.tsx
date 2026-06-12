@@ -133,6 +133,20 @@ function formatSaleTime(value: string | null | undefined) {
   return formatTime(value, "Sin hora");
 }
 
+function roundMoney(value: number) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
+function getCollectedAmount(sale: Sale, paymentTotals: Map<string, number>) {
+  const total = roundMoney(Number(sale.amount ?? 0));
+  const storedPaid = roundMoney(Number(sale.paid_amount ?? 0));
+  const storedBalance = roundMoney(Number(sale.balance_due ?? total));
+  const paidFromBalance = roundMoney(Math.max(0, total - storedBalance));
+  const paidFromPayments = roundMoney(paymentTotals.get(sale.id) ?? 0);
+
+  return Math.min(total, Math.max(storedPaid, paidFromBalance, paidFromPayments));
+}
+
 const shellClass =
   "min-h-full px-2 py-2 text-app sm:px-3 sm:py-3";
 
@@ -248,6 +262,24 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
   ]);
 
   const allSales = (sales ?? []) as Sale[];
+  const saleIds = allSales.map((sale) => sale.id).filter(Boolean);
+  const { data: salePayments } = saleIds.length > 0
+    ? await supabase
+        .from("sale_payments")
+        .select("sale_id, amount")
+        .eq("company_id", companyId)
+        .in("sale_id", saleIds)
+    : { data: [] };
+
+  const paymentTotals = new Map<string, number>();
+  for (const payment of salePayments ?? []) {
+    const saleId = String(payment.sale_id ?? "");
+    if (!saleId) continue;
+    paymentTotals.set(
+      saleId,
+      roundMoney((paymentTotals.get(saleId) ?? 0) + Number(payment.amount ?? 0))
+    );
+  }
 
   // Filtrar por estado en la vista principal
   const visibleSales = allSales.filter((sale) => {
@@ -264,13 +296,13 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
     0
   );
 
-  const totalPendingBalance = allSales.reduce(
-    (sum, sale) => sum + Number(sale.balance_due ?? 0),
+  const totalCollected = allSales.reduce(
+    (sum, sale) => sum + getCollectedAmount(sale, paymentTotals),
     0
   );
 
-  const totalCollected = allSales.reduce(
-    (sum, sale) => sum + Number(sale.paid_amount ?? 0),
+  const totalPendingBalance = allSales.reduce(
+    (sum, sale) => sum + Math.max(0, Number(sale.amount ?? 0) - getCollectedAmount(sale, paymentTotals)),
     0
   );
 

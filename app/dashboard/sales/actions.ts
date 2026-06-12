@@ -1402,6 +1402,7 @@ export async function recordPayment(
 
   if (error) return fail(error.message || "No se pudo registrar el pago.");
 
+  await recalcSaleTotals(context.supabase, saleId, context.companyId);
   revalidateSalesPages();
   return ok("Pago registrado correctamente.");
 }
@@ -1417,7 +1418,7 @@ async function recalcSaleTotals(
   const [{ data: sale }, { data: payments }] = await Promise.all([
     supabase
       .from("sales")
-      .select("amount, discount_amount")
+      .select("amount")
       .eq("id", saleId)
       .eq("company_id", companyId)
       .single(),
@@ -1433,7 +1434,7 @@ async function recalcSaleTotals(
   const paidAmount = roundMoney(
     (payments ?? []).reduce((s: number, r: { amount: unknown }) => s + Number(r.amount ?? 0), 0)
   );
-  const subtotal = roundMoney(Number(sale.amount ?? 0) - Number(sale.discount_amount ?? 0));
+  const subtotal = roundMoney(Number(sale.amount ?? 0));
   const balanceDue = roundMoney(Math.max(0, subtotal - paidAmount));
   const paymentStatus = balanceDue <= 0 ? "paid" : paidAmount > 0 ? "partial" : "pending";
 
