@@ -127,7 +127,7 @@ const panelClass =
   "rounded-[28px] border border-slate-200/90 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.12)] dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-[0_24px_80px_rgba(2,6,23,0.50)]";
 
 const cardClass =
-  "rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)] transition-colors hover:border-sky-200/80 dark:border-slate-700 dark:bg-slate-950/70 dark:shadow-none dark:hover:border-cyan-400/25";
+  "rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)] transition-colors [content-visibility:auto] [contain-intrinsic-size:220px] hover:border-sky-200/80 dark:border-slate-700 dark:bg-slate-950/70 dark:shadow-none dark:hover:border-cyan-400/25";
 
 const chipBase =
   "inline-flex rounded-full border px-3 py-1 text-xs uppercase tracking-[0.16em]";
@@ -150,6 +150,8 @@ const secondaryButtonClass =
 const dateInputClass =
   "w-full rounded-xl border border-slate-200/70 bg-white/85 px-4 py-2.5 text-slate-900 outline-none backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] placeholder:text-slate-400 transition-all duration-150 focus:border-sky-300 focus:ring-2 focus:ring-sky-100/80 dark:border-white/10 dark:bg-white/[0.07] dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:placeholder:text-slate-500 dark:[color-scheme:dark] dark:focus:border-cyan-400/60 dark:focus:ring-cyan-500/10";
 
+const HISTORY_PAGE_SIZE = 25;
+
 export function SalesHistoryModal({
   sales,
   from,
@@ -169,6 +171,7 @@ export function SalesHistoryModal({
   const [appliedFrom, setAppliedFrom] = useState(from ?? "");
   const [appliedTo, setAppliedTo] = useState(to ?? "");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "partial" | "paid">("all");
+  const [visiblePage, setVisiblePage] = useState({ key: "", count: HISTORY_PAGE_SIZE });
 
   function openModal() {
     setSearch("");
@@ -176,6 +179,7 @@ export function SalesHistoryModal({
     setDraftTo(to ?? "");
     setAppliedFrom(from ?? "");
     setAppliedTo(to ?? "");
+    setVisiblePage({ key: "", count: HISTORY_PAGE_SIZE });
     setOpen(true);
   }
 
@@ -206,6 +210,7 @@ export function SalesHistoryModal({
   const handleApplyFilters = () => {
     setAppliedFrom(draftFrom);
     setAppliedTo(draftTo);
+    setVisiblePage({ key: "", count: HISTORY_PAGE_SIZE });
   };
 
   const handleClearFilters = () => {
@@ -214,43 +219,82 @@ export function SalesHistoryModal({
     setDraftTo("");
     setAppliedFrom("");
     setAppliedTo("");
+    setStatusFilter("all");
+    setVisiblePage({ key: "", count: HISTORY_PAGE_SIZE });
   };
+
+  const preparedSales = useMemo(() => {
+    return sales.map((sale) => {
+      const paymentMethodLabel = formatPaymentMethodLabel(sale.payment_method);
+      const paymentTypeLabel = formatPaymentTypeLabel(sale.payment_type);
+      const paymentStatusLabel = formatPaymentStatusLabel(sale.payment_status);
+      const saleTime = formatSaleTime(sale.created_at);
+      const noteText = sale.invoice_notes || sale.note;
+      const isInstallment =
+        String(sale.payment_type ?? "").toLowerCase() === "installment";
+
+      return {
+        sale,
+        amount: Number(sale.amount ?? 0),
+        paidAmount: Number(sale.paid_amount ?? 0),
+        balanceDue: Number(sale.balance_due ?? 0),
+        noteText,
+        isInstallment,
+        saleDateLabel: formatShortDate(sale.sale_date),
+        saleTime,
+        paymentMethodLabel,
+        paymentTypeLabel,
+        paymentStatusLabel,
+        paymentStatus: (sale.payment_status ?? "").toLowerCase(),
+        searchText: [
+          sale.invoice_number ?? "",
+          sale.customer_name ?? "",
+          sale.customer_email ?? "",
+          sale.customer_phone ?? "",
+          sale.note ?? "",
+          sale.invoice_notes ?? "",
+          sale.sale_date ?? "",
+          saleTime,
+          paymentMethodLabel,
+          paymentTypeLabel,
+          paymentStatusLabel,
+        ]
+          .join(" ")
+          .toLowerCase(),
+      };
+    });
+  }, [sales]);
 
   const filteredSales = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
 
-    return sales.filter((sale) => {
+    return preparedSales.filter(({ sale, paymentStatus, searchText }) => {
       const saleDate = sale.sale_date ?? "";
 
       const matchesFrom = !appliedFrom || saleDate >= appliedFrom;
       const matchesTo = !appliedTo || saleDate <= appliedTo;
 
-      const status = (sale.payment_status ?? "").toLowerCase();
       const matchesStatus =
         statusFilter === "all" ||
-        status === statusFilter;
+        paymentStatus === statusFilter;
 
-      const searchableText = [
-        sale.invoice_number ?? "",
-        sale.customer_name ?? "",
-        sale.customer_email ?? "",
-        sale.customer_phone ?? "",
-        sale.note ?? "",
-        sale.invoice_notes ?? "",
-        sale.sale_date ?? "",
-        formatSaleTime(sale.created_at),
-        formatPaymentMethodLabel(sale.payment_method),
-        formatPaymentTypeLabel(sale.payment_type),
-        formatPaymentStatusLabel(sale.payment_status),
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      const matchesSearch = !query || searchableText.includes(query);
+      const matchesSearch = !query || searchText.includes(query);
 
       return matchesFrom && matchesTo && matchesStatus && matchesSearch;
     });
-  }, [sales, deferredSearch, appliedFrom, appliedTo, statusFilter]);
+  }, [preparedSales, deferredSearch, appliedFrom, appliedTo, statusFilter]);
+
+  const filterKey = `${deferredSearch}\u0001${appliedFrom}\u0001${appliedTo}\u0001${statusFilter}`;
+  const effectiveVisibleCount =
+    visiblePage.key === filterKey ? visiblePage.count : HISTORY_PAGE_SIZE;
+
+  const visibleSales = useMemo(
+    () => filteredSales.slice(0, effectiveVisibleCount),
+    [filteredSales, effectiveVisibleCount]
+  );
+
+  const hasMoreSales = effectiveVisibleCount < filteredSales.length;
+  const todayForPayments = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const rangeLabel = useMemo(() => {
     if (appliedFrom && appliedTo) return `Rango: ${appliedFrom} a ${appliedTo}`;
@@ -378,15 +422,8 @@ export function SalesHistoryModal({
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5 sm:py-4">
                   {filteredSales.length > 0 ? (
                     <div className="grid gap-3">
-                      {filteredSales.map((sale) => {
-                        const amount = Number(sale.amount ?? 0);
-                        const paidAmount = Number(sale.paid_amount ?? 0);
-                        const balanceDue = Number(sale.balance_due ?? 0);
-                        const noteText = sale.invoice_notes || sale.note;
-                        const isInstallment =
-                          String(sale.payment_type ?? "").toLowerCase() ===
-                          "installment";
-
+                      {visibleSales.map((row) => {
+                        const { sale } = row;
                         return (
                           <div key={sale.id} className={cardClass}>
                             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -396,7 +433,7 @@ export function SalesHistoryModal({
                                 </p>
 
                                 <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                                  {formatCurrency(amount)}
+                                  {formatCurrency(row.amount)}
                                 </p>
 
                                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
@@ -412,7 +449,7 @@ export function SalesHistoryModal({
                                     sale.payment_method
                                   )}`}
                                 >
-                                  {formatPaymentMethodLabel(sale.payment_method)}
+                                  {row.paymentMethodLabel}
                                 </span>
 
                                 <span
@@ -420,7 +457,7 @@ export function SalesHistoryModal({
                                     sale.payment_type
                                   )}`}
                                 >
-                                  {formatPaymentTypeLabel(sale.payment_type)}
+                                  {row.paymentTypeLabel}
                                 </span>
 
                                 <span
@@ -428,7 +465,7 @@ export function SalesHistoryModal({
                                     sale.payment_status
                                   )}`}
                                 >
-                                  {formatPaymentStatusLabel(sale.payment_status)}
+                                  {row.paymentStatusLabel}
                                 </span>
 
                                 {sale.has_payment_plan ? (
@@ -440,18 +477,17 @@ export function SalesHistoryModal({
                             </div>
 
                             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                              Fecha: {formatShortDate(sale.sale_date)} · Hora:{" "}
-                              {formatSaleTime(sale.created_at)}
+                              Fecha: {row.saleDateLabel} · Hora: {row.saleTime}
                             </p>
 
-                            {(sale.payment_type === "partial" || isInstallment) ? (
+                            {(sale.payment_type === "partial" || row.isInstallment) ? (
                               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/70">
                                   <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                                     Abonado
                                   </p>
                                   <p className="mt-1 text-sm font-medium text-slate-900 dark:text-slate-100">
-                                    {formatCurrency(paidAmount)}
+                                    {formatCurrency(row.paidAmount)}
                                   </p>
                                 </div>
 
@@ -460,15 +496,15 @@ export function SalesHistoryModal({
                                     Saldo
                                   </p>
                                   <p className="mt-1 text-sm font-medium text-slate-900 dark:text-slate-100">
-                                    {formatCurrency(balanceDue)}
+                                    {formatCurrency(row.balanceDue)}
                                   </p>
                                 </div>
                               </div>
                             ) : null}
 
-                            {noteText ? (
+                            {row.noteText ? (
                               <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                                {noteText}
+                                {row.noteText}
                               </p>
                             ) : null}
 
@@ -484,11 +520,11 @@ export function SalesHistoryModal({
                               {(sale.payment_status === "pending" ||
                                 sale.payment_status === "partial" ||
                                 sale.payment_status === "overdue") &&
-                              balanceDue > 0 && canManageRecords ? (
+                              row.balanceDue > 0 && canManageRecords ? (
                                 <RecordPaymentModal
                                   saleId={sale.id}
-                                  balanceDue={balanceDue}
-                                  today={new Date().toISOString().slice(0, 10)}
+                                  balanceDue={row.balanceDue}
+                                  today={todayForPayments}
                                   paymentMethods={paymentMethods}
                                   company={company}
                                   sale={sale}
@@ -519,6 +555,23 @@ export function SalesHistoryModal({
                           </div>
                         );
                       })}
+
+                      {hasMoreSales ? (
+                        <div className="flex justify-center py-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setVisiblePage({
+                                key: filterKey,
+                                count: effectiveVisibleCount + HISTORY_PAGE_SIZE,
+                              })
+                            }
+                            className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition-colors duration-150 hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                          >
+                            Cargar más
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   ) : (
                     <div className={cardClass}>
