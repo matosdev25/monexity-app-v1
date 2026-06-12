@@ -72,9 +72,8 @@ export async function middleware(request: NextRequest) {
 
     if (userError) return response;
 
-    const isPublicRoute = PUBLIC_ROUTES.some((route) =>
-      pathname.startsWith(route)
-    );
+    const isPublicRoute =
+      pathname === "/" || PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
 
     if (!user) {
       if (isPublicRoute) return response;

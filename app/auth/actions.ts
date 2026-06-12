@@ -210,7 +210,17 @@ export async function requestPasswordReset(
 
 export async function signOut() {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  const cookieStore = await cookies();
+
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // Si la sesión ya expiró, igual limpiamos cookies propias y salimos.
+  }
+
+  cookieStore.delete("active_company_id");
+  cookieStore.delete("pending_signup");
+
   revalidatePath("/");
-  redirect("/auth/login");
+  redirect("/");
 }
