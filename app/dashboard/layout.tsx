@@ -104,7 +104,7 @@ export default async function DashboardLayout({
 
   const { data: membershipsRaw, error: membershipsError } = await supabase
     .from("memberships")
-    .select("company_id, role, companies(id, name, logo_url, subscription_status, subscription_plan, trial_ends_at, current_period_ends_at, subscription_cancel_at_period_end, is_blocked, needs_inventory)")
+    .select("company_id, role, companies(id, name, logo_url, subscription_status, subscription_plan, trial_ends_at, current_period_ends_at, is_blocked, needs_inventory)")
     .eq("user_id", user.id);
 
   if (membershipsError) {
@@ -127,7 +127,6 @@ export default async function DashboardLayout({
     subscription_plan: string | null;
     trial_ends_at: string | null;
     current_period_ends_at: string | null;
-    subscription_cancel_at_period_end: boolean | null;
     is_blocked: boolean | null;
     needs_inventory: boolean | null;
   };
