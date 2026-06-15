@@ -319,110 +319,114 @@ export function SalesHistoryModal({
               <div
                 className={`${panelClass} relative flex h-[92dvh] max-h-[920px] w-full max-w-6xl flex-col overflow-hidden sm:h-[88vh]`}
               >
-                <div className="shrink-0 border-b border-slate-200 px-4 py-3 dark:border-slate-800 sm:px-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-cyan-300">
-                        Historial completo
-                      </p>
-                      <h2 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50 sm:text-2xl">
-                        Ventas
-                      </h2>
-                      <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
-                        {rangeLabel}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={closeModal}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition-colors duration-150 hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100"
-                      aria-label="Cerrar historial"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  <div className="mt-3 space-y-3">
-                    <div>
-                      <label className={labelClass}>Buscar</label>
-                      <input
-                        type="text"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Cliente, factura, nota o método"
-                        className={inputClass}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                  <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/95 sm:px-5">
+                    <div className="flex items-start justify-between gap-4">
                       <div>
-                        <label className={labelClass}>Desde</label>
-                        <input
-                          type="date"
-                          value={draftFrom}
-                          onChange={(e) => setDraftFrom(e.target.value)}
-                          className={dateInputClass}
-                        />
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-cyan-300">
+                          Historial completo
+                        </p>
+                        <h2 className="mt-0.5 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50 sm:text-2xl">
+                          Ventas
+                        </h2>
+                        <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
+                          {rangeLabel}
+                        </p>
                       </div>
-
-                      <div>
-                        <label className={labelClass}>Hasta</label>
-                        <input
-                          type="date"
-                          value={draftTo}
-                          onChange={(e) => setDraftTo(e.target.value)}
-                          className={dateInputClass}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={handleApplyFilters}
-                        className={`${primaryButtonClass} h-10 w-full px-3 py-2`}
-                      >
-                        Aplicar filtros
-                      </button>
 
                       <button
                         type="button"
-                        onClick={handleClearFilters}
-                        className={`${secondaryButtonClass} h-10 w-full px-3 py-2`}
+                        onClick={closeModal}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition-colors duration-150 hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                        aria-label="Cerrar historial"
                       >
-                        Limpiar
+                        ✕
                       </button>
+                    </div>
+
+	                    <div className="mt-3">
+	                      <div>
+	                        <label className={labelClass}>Buscar</label>
+	                        <input
+	                          type="text"
+	                          value={search}
+	                          onChange={(e) => setSearch(e.target.value)}
+	                          placeholder="Cliente, factura, nota o método"
+	                          className={inputClass}
+	                        />
+	                      </div>
                     </div>
                   </div>
 
-                  {/* Filtro de estado */}
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {(["all", "pending", "partial", "paid"] as const).map((s) => {
-                      const labels = { all: "Todas", pending: "Pendientes", partial: "Abonadas", paid: "Pagadas" };
-                      const active = statusFilter === s;
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => setStatusFilter(s)}
-                          className={[
-                            "rounded-xl border px-3 py-1.5 text-xs font-medium transition",
-                            active
-                              ? "border-sky-500 bg-sky-500 text-white dark:border-cyan-500 dark:bg-cyan-500 dark:text-slate-950"
-                              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
-                          ].join(" ")}
-                        >
-                          {labels[s]}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800 sm:px-5">
+	                    <div className="space-y-3">
+	                      <div className="grid grid-cols-2 gap-3">
+	                        <div>
+	                          <label className={labelClass}>Desde</label>
+	                          <input
+	                            type="date"
+	                            value={draftFrom}
+	                            onChange={(e) => setDraftFrom(e.target.value)}
+	                            className={dateInputClass}
+	                          />
+	                        </div>
 
-                </div>
+	                        <div>
+	                          <label className={labelClass}>Hasta</label>
+	                          <input
+	                            type="date"
+	                            value={draftTo}
+	                            onChange={(e) => setDraftTo(e.target.value)}
+	                            className={dateInputClass}
+	                          />
+	                        </div>
+	                      </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5 sm:py-4">
-                  {filteredSales.length > 0 ? (
+	                      <div className="grid grid-cols-2 gap-3">
+	                        <button
+	                          type="button"
+	                          onClick={handleApplyFilters}
+	                          className={`${primaryButtonClass} h-10 w-full px-3 py-2`}
+	                        >
+	                          Aplicar filtros
+	                        </button>
+
+	                        <button
+	                          type="button"
+	                          onClick={handleClearFilters}
+	                          className={`${secondaryButtonClass} h-10 w-full px-3 py-2`}
+	                        >
+	                          Limpiar
+	                        </button>
+	                      </div>
+
+	                      {/* Filtro de estado */}
+	                      <div className="flex flex-wrap gap-1.5">
+	                        {(["all", "pending", "partial", "paid"] as const).map((s) => {
+	                          const labels = { all: "Todas", pending: "Pendientes", partial: "Abonadas", paid: "Pagadas" };
+	                          const active = statusFilter === s;
+	                          return (
+	                            <button
+	                              key={s}
+	                              type="button"
+	                              onClick={() => setStatusFilter(s)}
+	                              className={[
+	                                "rounded-xl border px-3 py-1.5 text-xs font-medium transition",
+	                                active
+	                                  ? "border-sky-500 bg-sky-500 text-white dark:border-cyan-500 dark:bg-cyan-500 dark:text-slate-950"
+	                                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
+	                              ].join(" ")}
+	                            >
+	                              {labels[s]}
+	                            </button>
+	                          );
+	                        })}
+	                      </div>
+	                    </div>
+	                  </div>
+
+	                  <div className="px-4 py-3 sm:px-5 sm:py-4">
+	                  {filteredSales.length > 0 ? (
                     <div className="grid gap-3">
                       {visibleSales.map((row) => {
                         const { sale } = row;
@@ -582,6 +586,7 @@ export function SalesHistoryModal({
                       </p>
                     </div>
                   )}
+                  </div>
                 </div>
               </div>
             </div>
