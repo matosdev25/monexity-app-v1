@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Image from "next/image";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
@@ -30,6 +31,37 @@ function isExpiredAccountRoute(pathname: string, search: string) {
 
 function isExpiredAllowedDashboardPath(pathname: string, search: string) {
   return pathname.startsWith(BILLING_ROUTE) || isExpiredAccountRoute(pathname, search);
+}
+
+function getCompanyInitial(name: string) {
+  return name.trim().charAt(0).toUpperCase() || "M";
+}
+
+function MobileCompanyAvatar({
+  companyName,
+  logoUrl,
+}: {
+  companyName: string;
+  logoUrl: string | null;
+}) {
+  return (
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-app bg-app-soft text-sm font-semibold text-app shadow-[0_8px_18px_rgba(15,23,42,0.08)] dark:shadow-none"
+      aria-label={companyName}
+      title={companyName}
+    >
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logoUrl}
+          alt={`Logo de ${companyName}`}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <span aria-hidden="true">{getCompanyInitial(companyName)}</span>
+      )}
+    </div>
+  );
 }
 
 function PausedAccessScreen() {
@@ -233,6 +265,10 @@ export default async function DashboardLayout({
       };
     })
   );
+  const activeCompanyName = activeCompany.name ?? "Mi negocio";
+  const activeCompanyLogoUrl =
+    companyOptions.find((option) => option.companyId === activeCompany.id)?.logoUrl ?? null;
+
   return (
     <main className="h-dvh overflow-hidden text-app">
       <InactivityLogout />
@@ -241,7 +277,7 @@ export default async function DashboardLayout({
           <div className="flex h-full min-h-0 gap-3">
             <DashboardSidebar
               activeCompanyId={activeCompany.id}
-              activeCompanyName={activeCompany.name ?? "Mi negocio"}
+              activeCompanyName={activeCompanyName}
               activeRole={activeRole || "seller"}
               companyOptions={companyOptions}
               needsInventory={Boolean((activeCompany as { needs_inventory?: boolean }).needs_inventory)}
@@ -249,16 +285,39 @@ export default async function DashboardLayout({
             />
 
             <div className="relative app-panel flex min-h-0 flex-1 flex-col rounded-[28px] px-3 pb-3 sm:px-4 sm:pb-4 lg:px-5 lg:pb-5">
-              {/* Mobile header con hamburger */}
-              <div className="flex h-12 shrink-0 items-center md:hidden">
+              <div className="grid h-12 shrink-0 grid-cols-[40px_1fr_40px] items-center md:hidden">
                 <MobileSidebar
                   activeCompanyId={activeCompany.id}
-                  activeCompanyName={activeCompany.name ?? "Mi negocio"}
+                  activeCompanyName={activeCompanyName}
                   activeRole={activeRole || "seller"}
                   companyOptions={companyOptions}
                   needsInventory={Boolean((activeCompany as { needs_inventory?: boolean }).needs_inventory)}
                   isGlobalAdmin={isGlobalAdmin}
                 />
+                <div className="flex min-w-0 justify-center">
+                  <div className="relative h-8 w-[104px] overflow-hidden">
+                    <Image
+                      src="/logo/monexity-logotype-light.svg"
+                      alt="MONEXITY"
+                      fill
+                      sizes="104px"
+                      className="scale-[2.05] object-contain dark:hidden"
+                    />
+                    <Image
+                      src="/logo/monexity-logotype-dark.svg"
+                      alt="MONEXITY"
+                      fill
+                      sizes="104px"
+                      className="hidden scale-[2.05] object-contain dark:block"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <MobileCompanyAvatar
+                    companyName={activeCompanyName}
+                    logoUrl={activeCompanyLogoUrl}
+                  />
+                </div>
               </div>
 
               <div

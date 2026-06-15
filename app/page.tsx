@@ -229,9 +229,10 @@ function LandingHeader() {
         <div className="flex items-center justify-end gap-2">
           <Link
             href={LOGIN_HREF}
-            className="hidden rounded-[14px] px-4 py-2 text-sm font-medium text-slate-600 transition-[background-color,color] duration-180 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-95 sm:block dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+            className="rounded-[14px] px-2.5 py-2 text-sm font-medium text-slate-600 transition-[background-color,color] duration-180 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-95 sm:px-4 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           >
-            Iniciar sesión
+            <span className="sm:hidden">Entrar</span>
+            <span className="hidden sm:inline">Iniciar sesión</span>
           </Link>
           <Link
             href={SIGNUP_HREF}
@@ -239,7 +240,9 @@ function LandingHeader() {
           >
             Probar gratis
           </Link>
-          <ThemeToggle compact />
+          <div className="hidden sm:block">
+            <ThemeToggle compact />
+          </div>
         </div>
       </div>
     </header>

@@ -342,7 +342,7 @@ export function MobileSidebar({
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Abrir menú"
-        className="flex h-9 w-9 items-center justify-center rounded-[18px] border border-app bg-app-soft text-app-muted transition-[background-color,border-color,color] duration-180 hover:border-slate-300 hover:text-app active:scale-95 motion-reduce:transition-none dark:hover:border-slate-600 dark:hover:text-slate-100"
+        className="flex h-9 w-9 items-center justify-center rounded-[18px] border border-app bg-app-soft text-app-muted transition-[background-color,border-color,color] duration-[180ms] hover:border-slate-300 hover:text-app active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/50 motion-reduce:transition-none dark:hover:border-slate-600 dark:hover:text-slate-100 dark:focus-visible:ring-sky-400/40"
       >
         <MenuIcon />
       </button>
