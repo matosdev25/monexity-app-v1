@@ -343,7 +343,7 @@ export function SalesHistoryModal({
                     </button>
                   </div>
 
-                  <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_150px_150px_240px] lg:items-end">
+                  <div className="mt-3 space-y-3">
                     <div>
                       <label className={labelClass}>Buscar</label>
                       <input
@@ -355,27 +355,29 @@ export function SalesHistoryModal({
                       />
                     </div>
 
-                    <div>
-                      <label className={labelClass}>Desde</label>
-                      <input
-                        type="date"
-                        value={draftFrom}
-                        onChange={(e) => setDraftFrom(e.target.value)}
-                        className={dateInputClass}
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelClass}>Desde</label>
+                        <input
+                          type="date"
+                          value={draftFrom}
+                          onChange={(e) => setDraftFrom(e.target.value)}
+                          className={dateInputClass}
+                        />
+                      </div>
+
+                      <div>
+                        <label className={labelClass}>Hasta</label>
+                        <input
+                          type="date"
+                          value={draftTo}
+                          onChange={(e) => setDraftTo(e.target.value)}
+                          className={dateInputClass}
+                        />
+                      </div>
                     </div>
 
-                    <div>
-                      <label className={labelClass}>Hasta</label>
-                      <input
-                        type="date"
-                        value={draftTo}
-                        onChange={(e) => setDraftTo(e.target.value)}
-                        className={dateInputClass}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-3">
                       <button
                         type="button"
                         onClick={handleApplyFilters}
