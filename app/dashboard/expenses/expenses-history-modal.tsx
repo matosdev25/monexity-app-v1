@@ -219,11 +219,11 @@ export function ExpensesHistoryModal({
               onClick={closeModal}
             />
 
-            <div className="absolute inset-0 flex items-center justify-center p-4">
-              <div className={`${panelClass} relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden`}>
+            <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-4">
+              <div className={`${panelClass} relative flex h-[92dvh] max-h-[920px] w-full max-w-6xl flex-col overflow-hidden sm:h-[88vh]`}>
 
                 {/* Header */}
-                <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                <div className="shrink-0 border-b border-slate-200 px-4 py-3 dark:border-slate-800 sm:px-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-medium text-sky-700 dark:text-cyan-300">
@@ -248,7 +248,7 @@ export function ExpensesHistoryModal({
                   </div>
 
                   {/* Filtros */}
-                  <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px_170px_auto_auto]">
+                  <div className="mt-3 space-y-3">
                     <div>
                       <label className={labelClass}>Buscar</label>
                       <input
@@ -260,41 +260,41 @@ export function ExpensesHistoryModal({
                       />
                     </div>
 
-                    <div>
-                      <label className={labelClass}>Desde</label>
-                      <input
-                        type="date"
-                        value={draftFrom}
-                        onChange={(e) => setDraftFrom(e.target.value)}
-                        className={dateInputClass}
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelClass}>Desde</label>
+                        <input
+                          type="date"
+                          value={draftFrom}
+                          onChange={(e) => setDraftFrom(e.target.value)}
+                          className={dateInputClass}
+                        />
+                      </div>
+
+                      <div>
+                        <label className={labelClass}>Hasta</label>
+                        <input
+                          type="date"
+                          value={draftTo}
+                          onChange={(e) => setDraftTo(e.target.value)}
+                          className={dateInputClass}
+                        />
+                      </div>
                     </div>
 
-                    <div>
-                      <label className={labelClass}>Hasta</label>
-                      <input
-                        type="date"
-                        value={draftTo}
-                        onChange={(e) => setDraftTo(e.target.value)}
-                        className={dateInputClass}
-                      />
-                    </div>
-
-                    <div className="flex items-end">
+                    <div className="grid grid-cols-2 gap-3">
                       <button
                         type="button"
                         onClick={handleApplyFilters}
-                        className={`${primaryButtonClass} w-full`}
+                        className={`${primaryButtonClass} h-10 w-full px-3 py-2`}
                       >
                         Aplicar filtros
                       </button>
-                    </div>
 
-                    <div className="flex items-end">
                       <button
                         type="button"
                         onClick={handleClearFilters}
-                        className={`${secondaryButtonClass} w-full`}
+                        className={`${secondaryButtonClass} h-10 w-full px-3 py-2`}
                       >
                         Limpiar
                       </button>
@@ -302,7 +302,7 @@ export function ExpensesHistoryModal({
                   </div>
 
                   {/* Filtro de estado */}
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-1.5">
                     {(["all", "paid", "pending"] as const).map((s) => {
                       const labels = { all: "Todos", paid: "Pagados", pending: "Pendientes" };
                       const active = statusFilter === s;
@@ -326,7 +326,7 @@ export function ExpensesHistoryModal({
                 </div>
 
                 {/* Lista */}
-                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5 sm:py-4">
                   {filteredExpenses.length > 0 ? (
                     <div className="grid gap-3">
                       {filteredExpenses.map((expense) => {
