@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import type { Sale, SaleItem } from "./types";
 import { fetchSaleItems, fetchSalePlan, type SalePlanSummary } from "./actions";
 import { createClient } from "../../../lib/supabase/client";
@@ -969,8 +970,8 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
       </button>
 
       {/* Phone modal (z-60 — above invoice modal) */}
-      {showPhoneModal ? (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+      {showPhoneModal ? createPortal(
+        <div className="fixed inset-0 z-[1110] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-slate-950/50"
             onClick={() => {
@@ -1025,12 +1026,13 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
 
       {/* Invoice modal */}
-      {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {open ? createPortal(
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4">
           {/* Backdrop — no blur for performance */}
           <div
             className="absolute inset-0 bg-slate-950/50"
@@ -1238,7 +1240,8 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </>
   );
