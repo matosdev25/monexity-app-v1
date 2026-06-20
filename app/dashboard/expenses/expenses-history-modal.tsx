@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useDeferredValue, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, useDeferredValue, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ConfirmSubmitButton } from "../../../components/confirm-submit-button";
 import { EditExpenseModal } from "./edit-expense-modal";
@@ -94,7 +94,7 @@ const panelClass =
   "rounded-[28px] border border-slate-200/90 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.12)] dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-[0_24px_80px_rgba(2,6,23,0.50)]";
 
 const cardClass =
-  "rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)] transition-colors hover:border-sky-200/80 dark:border-slate-700 dark:bg-slate-950/70 dark:shadow-none dark:hover:border-cyan-400/25";
+  "rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)] transition-colors [content-visibility:auto] [contain-intrinsic-size:220px] hover:border-sky-200/80 dark:border-slate-700 dark:bg-slate-950/70 dark:shadow-none dark:hover:border-cyan-400/25";
 
 const chipBase =
   "inline-flex rounded-full border px-3 py-1 text-xs uppercase tracking-[0.16em]";
@@ -117,6 +117,109 @@ const secondaryButtonClass =
 const dateInputClass =
   "w-full rounded-xl border border-slate-200/70 bg-white/85 px-4 py-2.5 text-slate-900 outline-none backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] placeholder:text-slate-400 transition-all duration-150 focus:border-sky-300 focus:ring-2 focus:ring-sky-100/80 dark:border-white/10 dark:bg-white/[0.07] dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:placeholder:text-slate-500 dark:[color-scheme:dark] dark:focus:border-cyan-400/60 dark:focus:ring-cyan-500/10";
 
+const HISTORY_PAGE_SIZE = 25;
+
+type PreparedExpense = {
+  expense: Expense;
+  amountLabel: string;
+  dateLabel: string;
+  timeStr: string;
+  categoryLabel: string;
+  paymentMethodLabel: string;
+  statusLabel: string;
+  normalizedStatus: string;
+  searchText: string;
+};
+
+const ExpenseHistoryCard = memo(function ExpenseHistoryCard({
+  row,
+  deleteExpenseAction,
+  canEditManualDates,
+  canManageRecords,
+}: {
+  row: PreparedExpense;
+  deleteExpenseAction: (formData: FormData) => void | Promise<void>;
+  canEditManualDates: boolean;
+  canManageRecords: boolean;
+}) {
+  const { expense } = row;
+
+  return (
+    <div className={cardClass}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-sky-700/70 dark:text-cyan-300/70">
+            {expense.expense_number ?? row.categoryLabel}
+          </p>
+
+          <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+            {row.amountLabel}
+          </p>
+
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            {expense.supplier?.trim() ? expense.supplier : "Sin proveedor"}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {expense.payment_method && (
+            <span className={`${chipBase} ${getPaymentMethodChipClass(expense.payment_method)}`}>
+              {row.paymentMethodLabel}
+            </span>
+          )}
+
+          <span className={`${chipBase} ${getCategoryChipClass(expense.category)}`}>
+            {row.categoryLabel}
+          </span>
+
+          <span className={`${chipBase} ${getStatusChipClass(expense.status)}`}>
+            {row.statusLabel}
+          </span>
+
+          {expense.is_recurring ? (
+            <span className={`${chipBase} border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-400/25 dark:bg-indigo-500/10 dark:text-indigo-300`}>
+              Recurrente
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+        Fecha: {row.dateLabel}
+        {row.timeStr ? ` · Hora: ${row.timeStr}` : ""}
+      </p>
+
+      {expense.note ? (
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+          {expense.note}
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap gap-3">
+        <ExpenseDetailModal expense={expense} />
+        {canManageRecords && (
+          <>
+            <EditExpenseModal
+              expense={expense}
+              canEditManualDates={canEditManualDates}
+            />
+            <form action={deleteExpenseAction}>
+              <input type="hidden" name="expenseId" value={expense.id} />
+              <ConfirmSubmitButton
+                label="Eliminar"
+                title="Eliminar gasto"
+                confirmMessage="¿Seguro que quieres eliminar este gasto? Esta acción no se puede deshacer."
+                confirmLabel="Sí, eliminar"
+                className="rounded-2xl border border-rose-200/80 bg-rose-50/80 px-4 py-2 text-sm text-rose-600 transition hover:border-rose-300 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/15 dark:hover:text-rose-200"
+              />
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+});
+
 export function ExpensesHistoryModal({
   expenses,
   from,
@@ -134,6 +237,7 @@ export function ExpensesHistoryModal({
   const [appliedFrom, setAppliedFrom] = useState(from ?? "");
   const [appliedTo, setAppliedTo] = useState(to ?? "");
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "pending">("all");
+  const [visiblePage, setVisiblePage] = useState({ key: "", count: HISTORY_PAGE_SIZE });
 
   function openModal() {
     setSearch("");
@@ -142,6 +246,7 @@ export function ExpensesHistoryModal({
     setAppliedFrom(from ?? "");
     setAppliedTo(to ?? "");
     setStatusFilter("all");
+    setVisiblePage({ key: "", count: HISTORY_PAGE_SIZE });
     setOpen(true);
   }
 
@@ -167,6 +272,7 @@ export function ExpensesHistoryModal({
   const handleApplyFilters = () => {
     setAppliedFrom(draftFrom);
     setAppliedTo(draftTo);
+    setVisiblePage({ key: "", count: HISTORY_PAGE_SIZE });
   };
 
   const handleClearFilters = () => {
@@ -175,31 +281,63 @@ export function ExpensesHistoryModal({
     setDraftTo("");
     setAppliedFrom("");
     setAppliedTo("");
+    setVisiblePage({ key: "", count: HISTORY_PAGE_SIZE });
   };
+
+  const preparedExpenses = useMemo<PreparedExpense[]>(() => {
+    return expenses.map((expense) => {
+      const categoryLabel = formatCategoryLabel(expense.category);
+      const paymentMethodLabel = formatPaymentMethodLabel(expense.payment_method);
+      const statusLabel = formatStatusLabel(expense.status);
+      const timeStr = formatExpenseTime(expense.created_at);
+
+      return {
+        expense,
+        amountLabel: formatCurrency(Number(expense.amount ?? 0)),
+        dateLabel: formatShortDate(expense.expense_date),
+        timeStr,
+        categoryLabel,
+        paymentMethodLabel,
+        statusLabel,
+        normalizedStatus: (expense.status ?? "paid").toLowerCase(),
+        searchText: [
+          expense.expense_date,
+          expense.expense_number ?? "",
+          expense.supplier ?? "",
+          expense.note ?? "",
+          categoryLabel,
+          paymentMethodLabel,
+          statusLabel,
+        ].join(" ").toLowerCase(),
+      };
+    });
+  }, [expenses]);
 
   const filteredExpenses = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
 
-    return expenses.filter((expense) => {
+    return preparedExpenses.filter((row) => {
+      const { expense } = row;
       const expenseDate = expense.expense_date ?? "";
       const matchesFrom = !appliedFrom || expenseDate >= appliedFrom;
       const matchesTo = !appliedTo || expenseDate <= appliedTo;
       const matchesStatus =
-        statusFilter === "all" || (expense.status ?? "paid").toLowerCase() === statusFilter;
+        statusFilter === "all" || row.normalizedStatus === statusFilter;
 
-      const searchableText = [
-        expense.expense_date,
-        expense.expense_number ?? "",
-        expense.supplier ?? "",
-        expense.note ?? "",
-        formatCategoryLabel(expense.category),
-        formatPaymentMethodLabel(expense.payment_method),
-        formatStatusLabel(expense.status),
-      ].join(" ").toLowerCase();
-
-      return matchesFrom && matchesTo && matchesStatus && (!query || searchableText.includes(query));
+      return matchesFrom && matchesTo && matchesStatus && (!query || row.searchText.includes(query));
     });
-  }, [expenses, deferredSearch, appliedFrom, appliedTo, statusFilter]);
+  }, [preparedExpenses, deferredSearch, appliedFrom, appliedTo, statusFilter]);
+
+  const filterKey = `${deferredSearch}\u0001${appliedFrom}\u0001${appliedTo}\u0001${statusFilter}`;
+  const effectiveVisibleCount =
+    visiblePage.key === filterKey ? visiblePage.count : HISTORY_PAGE_SIZE;
+
+  const visibleExpenses = useMemo(
+    () => filteredExpenses.slice(0, effectiveVisibleCount),
+    [filteredExpenses, effectiveVisibleCount]
+  );
+
+  const hasMoreExpenses = effectiveVisibleCount < filteredExpenses.length;
 
   const rangeLabel = useMemo(() => {
     if (appliedFrom && appliedTo) return `Rango: ${appliedFrom} a ${appliedTo}`;
@@ -332,85 +470,32 @@ export function ExpensesHistoryModal({
                 <div className="px-4 py-3 sm:px-5 sm:py-4">
                   {filteredExpenses.length > 0 ? (
                     <div className="grid gap-3">
-                      {filteredExpenses.map((expense) => {
-                        const amount = Number(expense.amount ?? 0);
-                        const timeStr = formatExpenseTime(expense.created_at);
+                      {visibleExpenses.map((row) => (
+                        <ExpenseHistoryCard
+                          key={row.expense.id}
+                          row={row}
+                          deleteExpenseAction={deleteExpenseAction}
+                          canEditManualDates={canEditManualDates}
+                          canManageRecords={canManageRecords}
+                        />
+                      ))}
 
-                        return (
-                          <div key={expense.id} className={cardClass}>
-                            <div className="flex flex-wrap items-start justify-between gap-4">
-                              <div className="min-w-0">
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-sky-700/70 dark:text-cyan-300/70">
-                                  {expense.expense_number ?? formatCategoryLabel(expense.category)}
-                                </p>
-
-                                <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                                  {formatCurrency(amount)}
-                                </p>
-
-                                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                                  {expense.supplier?.trim() ? expense.supplier : "Sin proveedor"}
-                                </p>
-                              </div>
-
-                              <div className="flex flex-wrap gap-2">
-                                {expense.payment_method && (
-                                  <span className={`${chipBase} ${getPaymentMethodChipClass(expense.payment_method)}`}>
-                                    {formatPaymentMethodLabel(expense.payment_method)}
-                                  </span>
-                                )}
-
-                                <span className={`${chipBase} ${getCategoryChipClass(expense.category)}`}>
-                                  {formatCategoryLabel(expense.category)}
-                                </span>
-
-                                <span className={`${chipBase} ${getStatusChipClass(expense.status)}`}>
-                                  {formatStatusLabel(expense.status)}
-                                </span>
-
-                                {expense.is_recurring ? (
-                                  <span className={`${chipBase} border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-400/25 dark:bg-indigo-500/10 dark:text-indigo-300`}>
-                                    Recurrente
-                                  </span>
-                                ) : null}
-                              </div>
-                            </div>
-
-                            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                              Fecha: {formatShortDate(expense.expense_date)}
-                              {timeStr ? ` · Hora: ${timeStr}` : ""}
-                            </p>
-
-                            {expense.note ? (
-                              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                                {expense.note}
-                              </p>
-                            ) : null}
-
-                            <div className="mt-3 flex flex-wrap gap-3">
-                              <ExpenseDetailModal expense={expense} />
-                              {canManageRecords && (
-                                <>
-                                  <EditExpenseModal
-                                    expense={expense}
-                                    canEditManualDates={canEditManualDates}
-                                  />
-                                  <form action={deleteExpenseAction}>
-                                    <input type="hidden" name="expenseId" value={expense.id} />
-                                    <ConfirmSubmitButton
-                                      label="Eliminar"
-                                      title="Eliminar gasto"
-                                      confirmMessage="¿Seguro que quieres eliminar este gasto? Esta acción no se puede deshacer."
-                                      confirmLabel="Sí, eliminar"
-                                      className="rounded-2xl border border-rose-200/80 bg-rose-50/80 px-4 py-2 text-sm text-rose-600 transition hover:border-rose-300 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/15 dark:hover:text-rose-200"
-                                    />
-                                  </form>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {hasMoreExpenses ? (
+                        <div className="flex justify-center py-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setVisiblePage({
+                                key: filterKey,
+                                count: effectiveVisibleCount + HISTORY_PAGE_SIZE,
+                              })
+                            }
+                            className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition-colors duration-150 hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                          >
+                            Cargar más
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   ) : (
                     <div className={cardClass}>

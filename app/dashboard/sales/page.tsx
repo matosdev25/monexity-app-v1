@@ -134,6 +134,15 @@ function formatSaleTime(value: string | null | undefined) {
   return formatTime(value, "Sin hora");
 }
 
+function getSaleActivityTime(sale: Pick<Sale, "created_at" | "last_payment_at">) {
+  const dates = [sale.created_at, sale.last_payment_at]
+    .filter(Boolean)
+    .map((value) => new Date(String(value)).getTime())
+    .filter((value) => Number.isFinite(value));
+
+  return dates.length > 0 ? Math.max(...dates) : 0;
+}
+
 const shellClass =
   "min-h-full px-2 py-2 text-app sm:px-3 sm:py-3";
 
@@ -227,6 +236,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
         invoice_notes,
         sale_date,
         payment_date,
+        last_payment_at,
         created_at
       `
     )
@@ -301,7 +311,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
             ? "partial"
             : sale.payment_status,
     } satisfies Sale;
-  });
+  }).sort((a, b) => getSaleActivityTime(b) - getSaleActivityTime(a));
 
   // Filtrar por estado en la vista principal
   const visibleSales = allSales.filter((sale) => {

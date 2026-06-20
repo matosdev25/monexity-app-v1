@@ -1542,7 +1542,7 @@ async function recalcSaleTotals(
   saleId: string,
   companyId: string
 ): Promise<void> {
-  const [{ data: sale }, { data: payments }, { data: plan }] = await Promise.all([
+  const [{ data: sale }, { data: payments }, { data: plan }, { data: paidInstallments }] = await Promise.all([
     supabase
       .from("sales")
       .select("amount, payment_type, has_payment_plan")
@@ -1551,7 +1551,7 @@ async function recalcSaleTotals(
       .single(),
     supabase
       .from("sale_payments")
-      .select("amount")
+      .select("amount, created_at")
       .eq("sale_id", saleId)
       .eq("company_id", companyId),
     supabase
@@ -1560,6 +1560,12 @@ async function recalcSaleTotals(
       .eq("sale_id", saleId)
       .eq("company_id", companyId)
       .maybeSingle(),
+    supabase
+      .from("sale_installments")
+      .select("paid_at")
+      .eq("sale_id", saleId)
+      .eq("company_id", companyId)
+      .eq("status", "paid"),
   ]);
 
   if (!sale) return;
@@ -1575,10 +1581,21 @@ async function recalcSaleTotals(
   const paidAmount = paymentSummary.collectedAmount;
   const balanceDue = paymentSummary.pendingBalance;
   const paymentStatus = balanceDue <= 0 ? "paid" : paidAmount > 0 ? "partial" : "pending";
+  const lastPaymentAt = [...(payments ?? []), ...(paidInstallments ?? [])]
+    .map((row: { created_at?: unknown; paid_at?: unknown }) => row.created_at ?? row.paid_at)
+    .filter(Boolean)
+    .map((value: unknown) => new Date(String(value)).getTime())
+    .filter((value: number) => Number.isFinite(value))
+    .sort((a: number, b: number) => b - a)[0];
 
   await supabase
     .from("sales")
-    .update({ paid_amount: paidAmount, balance_due: balanceDue, payment_status: paymentStatus })
+    .update({
+      paid_amount: paidAmount,
+      balance_due: balanceDue,
+      payment_status: paymentStatus,
+      last_payment_at: lastPaymentAt ? new Date(lastPaymentAt).toISOString() : null,
+    })
     .eq("id", saleId)
     .eq("company_id", companyId);
 }

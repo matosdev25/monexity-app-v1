@@ -51,6 +51,7 @@ type RecentMovement = {
   amount: number;
   date: string;
   createdAt: string | null;
+  activityAt: string | null;
   label: string;
   meta: string;
 };
@@ -107,6 +108,25 @@ function getPanamaDateParts(date = new Date()) {
     day,
     iso: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
   };
+}
+
+function getActivityTime(value: string | null | undefined, fallbackDate: string) {
+  if (value) return new Date(value).getTime();
+  return new Date(`${fallbackDate}T00:00:00`).getTime();
+}
+
+function getSaleActivityAt(sale: {
+  created_at?: string | null;
+  last_payment_at?: string | null;
+}) {
+  const dates = [sale.created_at, sale.last_payment_at]
+    .filter(Boolean)
+    .map((value) => new Date(String(value)).getTime())
+    .filter((value) => Number.isFinite(value));
+
+  if (dates.length === 0) return null;
+
+  return new Date(Math.max(...dates)).toISOString();
 }
 
 function getMonthRangeInPanama() {
@@ -382,7 +402,8 @@ export default async function DashboardPage() {
     { data: profile },
     { data: company },
     { data: totalsData, error: totalsError },
-    { data: recentSalesData },
+    { data: recentSalesByCreatedData },
+    { data: recentSalesByPaymentData },
     { data: recentExpensesData },
     { data: yesterdaySalesData },
     { data: trendSalesData },
@@ -414,11 +435,17 @@ export default async function DashboardPage() {
     }),
     supabase
       .from("sales")
-      .select("id, amount, payment_method, sale_date, created_at, customer_name")
+      .select("id, amount, payment_method, sale_date, created_at, last_payment_at, customer_name")
       .eq("company_id", membership.company_id)
-      .order("sale_date", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(4),
+      .limit(12),
+    supabase
+      .from("sales")
+      .select("id, amount, payment_method, sale_date, created_at, last_payment_at, customer_name")
+      .eq("company_id", membership.company_id)
+      .not("last_payment_at", "is", null)
+      .order("last_payment_at", { ascending: false })
+      .limit(12),
     supabase
       .from("expenses")
       .select("id, amount, category, expense_date, created_at")
@@ -520,12 +547,18 @@ export default async function DashboardPage() {
   const totalExpensesMonth = Number(totals.expenses_month ?? 0);
   const balanceMonth = totalSalesMonth - totalExpensesMonth;
 
-  const recentSales: RecentMovement[] = (recentSalesData ?? []).map((sale) => ({
+  const recentSalesMap = new Map<string, NonNullable<typeof recentSalesByCreatedData>[number]>();
+  for (const sale of [...(recentSalesByCreatedData ?? []), ...(recentSalesByPaymentData ?? [])]) {
+    recentSalesMap.set(sale.id, sale);
+  }
+
+  const recentSales: RecentMovement[] = [...recentSalesMap.values()].map((sale) => ({
     id: sale.id,
     type: "sale",
     amount: Number(sale.amount ?? 0),
     date: sale.sale_date,
     createdAt: sale.created_at ?? null,
+    activityAt: getSaleActivityAt(sale),
     label: sale.customer_name?.trim() || "Venta registrada",
     meta: formatPaymentMethodLabel(sale.payment_method),
   }));
@@ -536,18 +569,16 @@ export default async function DashboardPage() {
     amount: Number(expense.amount ?? 0),
     date: expense.expense_date,
     createdAt: expense.created_at ?? null,
+    activityAt: expense.created_at ?? null,
     label: "Gasto registrado",
     meta: formatExpenseCategoryLabel(expense.category),
   }));
 
   const recentMovements = [...recentSales, ...recentExpenses]
     .sort((a, b) => {
-      const dateA = new Date(`${a.date}T00:00:00`).getTime();
-      const dateB = new Date(`${b.date}T00:00:00`).getTime();
-      if (dateA !== dateB) return dateB - dateA;
-      const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return createdB - createdA;
+      const activityA = getActivityTime(a.activityAt ?? a.createdAt, a.date);
+      const activityB = getActivityTime(b.activityAt ?? b.createdAt, b.date);
+      return activityB - activityA;
     })
     .slice(0, 6);
 
