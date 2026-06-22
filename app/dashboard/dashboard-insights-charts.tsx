@@ -360,7 +360,7 @@ function RangeFilterSelector({
 
 const METRICS_OPTIONS: { value: TrendMetrics; label: string }[] = [
   { value: "both", label: "Ambas" },
-  { value: "sales", label: "Ventas" },
+  { value: "sales", label: "Cobrado" },
   { value: "expenses", label: "Gastos" },
 ];
 
@@ -400,7 +400,7 @@ function MetricsSelector({
 // ── Compare metric selector ───────────────────────────────────────────────────
 
 const COMPARE_OPTIONS: { value: CompareMetric; label: string }[] = [
-  { value: "sales", label: "Ventas" },
+  { value: "sales", label: "Cobrado" },
   { value: "expenses", label: "Gastos" },
   { value: "balance", label: "Balance" },
 ];
@@ -476,7 +476,7 @@ function PieBalanceChart({
 
       <div ref={ref} className="mt-4 h-60">
         {!hasData ? (
-          <EmptyChartState message="Aún no hay ventas ni gastos del mes para graficar." />
+          <EmptyChartState message="Aún no hay cobros ni gastos del mes para graficar." />
         ) : width ? (
           <PieChart width={width} height={240}>
             <Pie
@@ -493,7 +493,7 @@ function PieBalanceChart({
               {balanceData.map((entry, index) => (
                 <Cell
                   key={`balance-${index}`}
-                  fill={entry.name === "Ventas" ? theme.emerald : theme.red}
+                  fill={entry.name === "Gastos" ? theme.red : theme.emerald}
                   fillOpacity={0.92}
                 />
               ))}
@@ -507,7 +507,7 @@ function PieBalanceChart({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-[18px] bg-emerald-500/10 px-3 py-2 dark:bg-emerald-500/14">
-          <p className="text-xs text-app-muted">Ventas</p>
+          <p className="text-xs text-app-muted">Cobrado</p>
           <p className="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
             {formatCurrency(salesMonth)}
           </p>
@@ -531,13 +531,13 @@ function DailyBarChart({ data }: { data: DailyComparisonItem[] }) {
   return (
     <div className={chartCardClass}>
       <div>
-        <p className="text-sm font-medium text-app-muted">Ventas de hoy vs ayer</p>
-        <p className="mt-1 text-sm text-app-muted">Comparación rápida del rendimiento diario.</p>
+        <p className="text-sm font-medium text-app-muted">Cobrado hoy vs ayer</p>
+        <p className="mt-1 text-sm text-app-muted">Comparación rápida del dinero recibido.</p>
       </div>
 
       <div ref={ref} className="mt-4 h-70">
         {!hasData ? (
-          <EmptyChartState message="No hay ventas registradas entre hoy y ayer." />
+          <EmptyChartState message="No hay cobros registrados entre hoy y ayer." />
         ) : width ? (
           <BarChart width={width} height={280} data={data} barSize={38}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.borderSoft} />
@@ -554,7 +554,7 @@ function DailyBarChart({ data }: { data: DailyComparisonItem[] }) {
               tickFormatter={(value) => `$${Number(value).toFixed(0)}`}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="value" name="Ventas" radius={[14, 14, 8, 8]}>
+            <Bar dataKey="value" name="Cobrado" radius={[14, 14, 8, 8]}>
               {data.map((item, index) => (
                 <Cell
                   key={`day-${index}`}
@@ -596,7 +596,7 @@ function TrendLineChart({
   const hasData = hasPositiveValues(chartData);
 
   const metricLabel =
-    metrics === "both" ? "ventas y gastos" : metrics === "sales" ? "ventas" : "gastos";
+    metrics === "both" ? "cobrado y gastos" : metrics === "sales" ? "cobrado" : "gastos";
 
   return (
     <div className={chartCardClass}>
@@ -639,7 +639,7 @@ function TrendLineChart({
                 <Area
                   type="monotone"
                   dataKey="ventas"
-                  name="Ventas"
+                  name="Cobrado"
                   stroke={theme.emeraldSoft}
                   fill={theme.emeraldSoft}
                   fillOpacity={0.14}
@@ -691,7 +691,7 @@ function PaymentMethodsChart({ data }: { data: Array<{ name: string; value: numb
 
       <div ref={ref} className="mt-4 h-64">
         {!hasData ? (
-          <EmptyChartState message="No hay ventas con método de pago en este rango." />
+          <EmptyChartState message="No hay cobros con método de pago en este rango." />
         ) : width ? (
           <PieChart width={width} height={256}>
             <Pie
@@ -789,7 +789,7 @@ function ComparisonBarChart({
   const activeColor =
     metric === "sales" ? theme.emerald : metric === "expenses" ? theme.red : theme.sky;
   const metricLabel =
-    metric === "sales" ? "Ventas" : metric === "expenses" ? "Gastos" : "Balance";
+    metric === "sales" ? "Cobrado" : metric === "expenses" ? "Gastos" : "Balance";
 
   const chartData = data.map((item) => ({
     label: item.label,

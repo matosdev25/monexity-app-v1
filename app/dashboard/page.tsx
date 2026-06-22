@@ -47,7 +47,7 @@ const actionLinkClass = "app-button-soft";
 
 type RecentMovement = {
   id: string;
-  type: "sale" | "expense";
+  type: "sale" | "payment" | "expense";
   amount: number;
   date: string;
   createdAt: string | null;
@@ -61,6 +61,40 @@ type DashboardChartSale = {
   amount: number;
   paymentMethod: string | null;
   saleDate: string;
+};
+
+type CollectedSaleRow = {
+  id: string;
+  amount: number | string | null;
+  paid_amount: number | string | null;
+  payment_method: string | null;
+  payment_type: string | null;
+  has_payment_plan: boolean | null;
+  sale_date: string;
+  payment_date: string | null;
+};
+
+type CollectedPaymentRow = {
+  id: string;
+  sale_id: string;
+  amount: number | string | null;
+  payment_method: string | null;
+  payment_date: string;
+  created_at: string | null;
+};
+
+type CollectedPaymentPlanRow = {
+  sale_id: string;
+  down_payment_amount: number | string | null;
+};
+
+type CollectedEvent = {
+  id: string;
+  saleId: string;
+  amount: number;
+  paymentMethod: string | null;
+  date: string;
+  createdAt: string | null;
 };
 
 type DashboardChartSaleItem = {
@@ -115,18 +149,59 @@ function getActivityTime(value: string | null | undefined, fallbackDate: string)
   return new Date(`${fallbackDate}T00:00:00`).getTime();
 }
 
-function getSaleActivityAt(sale: {
-  created_at?: string | null;
-  last_payment_at?: string | null;
+function isInstallmentSale(sale: {
+  payment_type?: string | null;
+  has_payment_plan?: boolean | null;
 }) {
-  const dates = [sale.created_at, sale.last_payment_at]
-    .filter(Boolean)
-    .map((value) => new Date(String(value)).getTime())
-    .filter((value) => Number.isFinite(value));
+  return (
+    String(sale.payment_type ?? "").toLowerCase() === "installment" ||
+    Boolean(sale.has_payment_plan)
+  );
+}
 
-  if (dates.length === 0) return null;
+function getCollectedEvents(params: {
+  sales: CollectedSaleRow[];
+  payments: CollectedPaymentRow[];
+  plans: CollectedPaymentPlanRow[];
+}) {
+  const { sales, payments, plans } = params;
+  const downPaymentsBySaleId = new Map(
+    plans.map((plan) => [
+      String(plan.sale_id),
+      Number(plan.down_payment_amount ?? 0),
+    ])
+  );
 
-  return new Date(Math.max(...dates)).toISOString();
+  const saleEvents: CollectedEvent[] = sales.flatMap((sale) => {
+    const installment = isInstallmentSale(sale);
+    const amount = installment
+      ? Number(downPaymentsBySaleId.get(sale.id) ?? 0)
+      : Number(sale.paid_amount ?? 0);
+
+    if (!Number.isFinite(amount) || amount <= 0) return [];
+
+    return [{
+      id: installment ? `down-payment:${sale.id}` : `sale-payment:${sale.id}`,
+      saleId: sale.id,
+      amount,
+      paymentMethod: sale.payment_method ?? null,
+      date: sale.payment_date || sale.sale_date,
+      createdAt: null,
+    }];
+  });
+
+  const laterPaymentEvents: CollectedEvent[] = payments
+    .map((payment) => ({
+      id: `payment:${payment.id}`,
+      saleId: String(payment.sale_id),
+      amount: Number(payment.amount ?? 0),
+      paymentMethod: payment.payment_method ?? null,
+      date: payment.payment_date,
+      createdAt: payment.created_at ?? null,
+    }))
+    .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
+
+  return [...saleEvents, ...laterPaymentEvents];
 }
 
 function getMonthRangeInPanama() {
@@ -269,7 +344,7 @@ function ActionLink({ href, label }: { href: string; label: string }) {
 }
 
 function RecentMovementItem({ item }: { item: RecentMovement }) {
-  const isSale = item.type === "sale";
+  const isIncome = item.type === "sale" || item.type === "payment";
 
   return (
     <div className={movementCardClass}>
@@ -278,12 +353,12 @@ function RecentMovementItem({ item }: { item: RecentMovement }) {
           <div
             className={[
               "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
-              isSale
+              isIncome
                 ? "bg-emerald-500/12 text-emerald-700 dark:bg-emerald-500/18 dark:text-emerald-300"
                 : "bg-red-500/12 text-red-700 dark:bg-red-500/18 dark:text-red-300",
             ].join(" ")}
           >
-            {isSale ? "+" : "-"}
+            {isIncome ? "+" : "-"}
           </div>
           <div className="min-w-0">
             <p className="truncate text-[15px] font-semibold tracking-tight text-app">
@@ -296,12 +371,12 @@ function RecentMovementItem({ item }: { item: RecentMovement }) {
           <p
             className={[
               "text-[15px] font-semibold tracking-tight",
-              isSale
+              isIncome
                 ? "text-emerald-600 dark:text-emerald-300"
                 : "text-red-600 dark:text-red-300",
             ].join(" ")}
           >
-            {isSale ? "+" : "-"}
+            {isIncome ? "+" : "-"}
             {formatCurrency(item.amount)}
           </p>
           <p className="mt-0.5 text-sm text-app-soft">
@@ -397,25 +472,24 @@ export default async function DashboardPage() {
     d.setDate(d.getDate() + index);
     return getPanamaDateParts(d).iso;
   });
+  const collectedStart = prev2Range.start < chartStart ? prev2Range.start : chartStart;
 
   const [
     { data: profile },
     { data: company },
     { data: totalsData, error: totalsError },
     { data: recentSalesByCreatedData },
-    { data: recentSalesByPaymentData },
     { data: recentExpensesData },
-    { data: yesterdaySalesData },
-    { data: trendSalesData },
     { data: trendExpensesData },
     paymentMethods,
     allProducts,
     activeServices,
-    { data: prev1SalesData },
     { data: prev1ExpensesData },
-    { data: prev2SalesData },
     { data: prev2ExpensesData },
     { data: chartSalesData },
+    { data: collectedSalesData },
+    { data: collectedPaymentsData },
+    { data: recentPaymentsData },
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -435,16 +509,9 @@ export default async function DashboardPage() {
     }),
     supabase
       .from("sales")
-      .select("id, amount, payment_method, sale_date, created_at, last_payment_at, customer_name")
+      .select("id, amount, payment_method, sale_date, created_at, customer_name")
       .eq("company_id", membership.company_id)
       .order("created_at", { ascending: false })
-      .limit(12),
-    supabase
-      .from("sales")
-      .select("id, amount, payment_method, sale_date, created_at, last_payment_at, customer_name")
-      .eq("company_id", membership.company_id)
-      .not("last_payment_at", "is", null)
-      .order("last_payment_at", { ascending: false })
       .limit(12),
     supabase
       .from("expenses")
@@ -454,16 +521,6 @@ export default async function DashboardPage() {
       .order("created_at", { ascending: false })
       .limit(4),
     supabase
-      .from("sales")
-      .select("amount")
-      .eq("company_id", membership.company_id)
-      .eq("sale_date", yesterday),
-    supabase
-      .from("sales")
-      .select("amount, sale_date")
-      .eq("company_id", membership.company_id)
-      .in("sale_date", trendDates),
-    supabase
       .from("expenses")
       .select("amount, expense_date")
       .eq("company_id", membership.company_id)
@@ -472,23 +529,11 @@ export default async function DashboardPage() {
     fetchActiveProducts(membership.company_id),
     fetchActiveServices(membership.company_id),
     supabase
-      .from("sales")
-      .select("amount")
-      .eq("company_id", membership.company_id)
-      .gte("sale_date", prev1Range.start)
-      .lt("sale_date", prev1Range.end),
-    supabase
       .from("expenses")
       .select("amount")
       .eq("company_id", membership.company_id)
       .gte("expense_date", prev1Range.start)
       .lt("expense_date", prev1Range.end),
-    supabase
-      .from("sales")
-      .select("amount")
-      .eq("company_id", membership.company_id)
-      .gte("sale_date", prev2Range.start)
-      .lt("sale_date", prev2Range.end),
     supabase
       .from("expenses")
       .select("amount")
@@ -501,7 +546,54 @@ export default async function DashboardPage() {
       .eq("company_id", membership.company_id)
       .gte("sale_date", chartStart)
       .lt("sale_date", tomorrow),
+    supabase
+      .from("sales")
+      .select("id, amount, paid_amount, payment_method, payment_type, has_payment_plan, sale_date, payment_date")
+      .eq("company_id", membership.company_id)
+      .or(`sale_date.gte.${collectedStart},payment_date.gte.${collectedStart}`),
+    supabase
+      .from("sale_payments")
+      .select("id, sale_id, amount, payment_method, payment_date, created_at")
+      .eq("company_id", membership.company_id)
+      .gte("payment_date", collectedStart)
+      .lt("payment_date", tomorrow),
+    supabase
+      .from("sale_payments")
+      .select("id, sale_id, amount, payment_method, payment_date, created_at")
+      .eq("company_id", membership.company_id)
+      .order("payment_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(12),
   ]);
+
+  const collectedSaleIds = (collectedSalesData ?? []).map((sale) => sale.id).filter(Boolean);
+  const recentPaymentSaleIds = (recentPaymentsData ?? [])
+    .map((payment) => payment.sale_id)
+    .filter(Boolean);
+  const relatedSaleIds = Array.from(new Set([...collectedSaleIds, ...recentPaymentSaleIds]));
+
+  const [{ data: collectedPaymentPlansData }, { data: recentPaymentSalesData }] = await Promise.all([
+    collectedSaleIds.length > 0
+      ? supabase
+          .from("sale_payment_plans")
+          .select("sale_id, down_payment_amount")
+          .eq("company_id", membership.company_id)
+          .in("sale_id", collectedSaleIds)
+      : Promise.resolve({ data: [] }),
+    relatedSaleIds.length > 0
+      ? supabase
+          .from("sales")
+          .select("id, invoice_number, customer_name")
+          .eq("company_id", membership.company_id)
+          .in("id", relatedSaleIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const collectedEvents = getCollectedEvents({
+    sales: (collectedSalesData ?? []) as CollectedSaleRow[],
+    payments: (collectedPaymentsData ?? []) as CollectedPaymentRow[],
+    plans: (collectedPaymentPlansData ?? []) as CollectedPaymentPlanRow[],
+  });
 
   const chartSales: DashboardChartSale[] = (chartSalesData ?? []).map((sale) => ({
     id: sale.id,
@@ -539,29 +631,54 @@ export default async function DashboardPage() {
     expenses_month: 0,
   };
 
-  const totalSalesToday = Number(totals.sales_today ?? 0);
+  const totalSalesToday = collectedEvents
+    .filter((event) => event.date === today)
+    .reduce((sum, event) => sum + event.amount, 0);
   const totalExpensesToday = Number(totals.expenses_today ?? 0);
   const balanceToday = totalSalesToday - totalExpensesToday;
 
-  const totalSalesMonth = Number(totals.sales_month ?? 0);
+  const totalSalesMonth = collectedEvents
+    .filter((event) => event.date >= startStr && event.date < endStr && event.date < tomorrow)
+    .reduce((sum, event) => sum + event.amount, 0);
   const totalExpensesMonth = Number(totals.expenses_month ?? 0);
   const balanceMonth = totalSalesMonth - totalExpensesMonth;
 
-  const recentSalesMap = new Map<string, NonNullable<typeof recentSalesByCreatedData>[number]>();
-  for (const sale of [...(recentSalesByCreatedData ?? []), ...(recentSalesByPaymentData ?? [])]) {
-    recentSalesMap.set(sale.id, sale);
-  }
-
-  const recentSales: RecentMovement[] = [...recentSalesMap.values()].map((sale) => ({
+  const recentSales: RecentMovement[] = (recentSalesByCreatedData ?? []).map((sale) => ({
     id: sale.id,
     type: "sale",
     amount: Number(sale.amount ?? 0),
     date: sale.sale_date,
     createdAt: sale.created_at ?? null,
-    activityAt: getSaleActivityAt(sale),
+    activityAt: sale.created_at ?? null,
     label: sale.customer_name?.trim() || "Venta registrada",
     meta: formatPaymentMethodLabel(sale.payment_method),
   }));
+
+  const recentPaymentSalesById = new Map(
+    (recentPaymentSalesData ?? []).map((sale) => [String(sale.id), sale])
+  );
+
+  const recentPayments: RecentMovement[] = (recentPaymentsData ?? []).map((payment) => {
+    const sale = recentPaymentSalesById.get(String(payment.sale_id));
+    const invoiceNumber = String(sale?.invoice_number ?? "").trim();
+    const customerName = String(sale?.customer_name ?? "").trim();
+    const meta = customerName
+      ? `Pago recibido de ${customerName}.`
+      : invoiceNumber
+        ? `Se registró un pago en la factura #${invoiceNumber}.`
+        : "Se registró un pago en una venta a cuota.";
+
+    return {
+      id: String(payment.id),
+      type: "payment",
+      amount: Number(payment.amount ?? 0),
+      date: String(payment.payment_date ?? ""),
+      createdAt: payment.created_at ?? null,
+      activityAt: payment.payment_date ? `${payment.payment_date}T12:00:00` : payment.created_at ?? null,
+      label: "Pago registrado",
+      meta,
+    };
+  });
 
   const recentExpenses: RecentMovement[] = (recentExpensesData ?? []).map((expense) => ({
     id: expense.id,
@@ -574,7 +691,7 @@ export default async function DashboardPage() {
     meta: formatExpenseCategoryLabel(expense.category),
   }));
 
-  const recentMovements = [...recentSales, ...recentExpenses]
+  const recentMovements = [...recentSales, ...recentPayments, ...recentExpenses]
     .sort((a, b) => {
       const activityA = getActivityTime(a.activityAt ?? a.createdAt, a.date);
       const activityB = getActivityTime(b.activityAt ?? b.createdAt, b.date);
@@ -582,27 +699,33 @@ export default async function DashboardPage() {
     })
     .slice(0, 6);
 
-  const salesYesterdayValue = (yesterdaySalesData ?? []).reduce(
-    (sum, item) => sum + Number(item.amount ?? 0),
-    0
-  );
+  const salesYesterdayValue = collectedEvents
+    .filter((event) => event.date === yesterday)
+    .reduce((sum, event) => sum + event.amount, 0);
 
-  const balanceData = [
-    { name: "Ventas", value: totalSalesMonth },
-    { name: "Gastos", value: totalExpensesMonth },
-  ];
+  const collectedChartSales: DashboardChartSale[] = collectedEvents
+    .filter((event) => event.date >= chartStart && event.date < tomorrow)
+    .map((event) => ({
+      id: event.saleId,
+      amount: event.amount,
+      paymentMethod: event.paymentMethod,
+      saleDate: event.date,
+    }));
 
-  const dailySalesComparison = [
-    { label: "Ayer", value: salesYesterdayValue },
-    { label: "Hoy", value: totalSalesToday },
-  ];
+  const prev1SalesTotal = collectedEvents
+    .filter((event) => event.date >= prev1Range.start && event.date < prev1Range.end)
+    .reduce((sum, event) => sum + event.amount, 0);
+  const prev2SalesTotal = collectedEvents
+    .filter((event) => event.date >= prev2Range.start && event.date < prev2Range.end)
+    .reduce((sum, event) => sum + event.amount, 0);
 
   const salesByDate = new Map<string, number>();
   const expensesByDate = new Map<string, number>();
 
-  for (const item of trendSalesData ?? []) {
-    const current = salesByDate.get(item.sale_date) ?? 0;
-    salesByDate.set(item.sale_date, current + Number(item.amount ?? 0));
+  for (const event of collectedEvents) {
+    if (!trendDates.includes(event.date)) continue;
+    const current = salesByDate.get(event.date) ?? 0;
+    salesByDate.set(event.date, current + event.amount);
   }
 
   for (const item of trendExpensesData ?? []) {
@@ -616,15 +739,23 @@ export default async function DashboardPage() {
     gastos: expensesByDate.get(date) ?? 0,
   }));
 
-  const prev1SalesTotal = (prev1SalesData ?? []).reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
   const prev1ExpensesTotal = (prev1ExpensesData ?? []).reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
-  const prev2SalesTotal = (prev2SalesData ?? []).reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
   const prev2ExpensesTotal = (prev2ExpensesData ?? []).reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
 
   const monthlyData = [
     { label: getPanamaMonthLabel(prev2.year, prev2.month), ventas: prev2SalesTotal, gastos: prev2ExpensesTotal, balance: prev2SalesTotal - prev2ExpensesTotal, isCurrent: false },
     { label: getPanamaMonthLabel(prev1.year, prev1.month), ventas: prev1SalesTotal, gastos: prev1ExpensesTotal, balance: prev1SalesTotal - prev1ExpensesTotal, isCurrent: false },
     { label: getPanamaMonthLabel(currentYear, currentMonth), ventas: totalSalesMonth, gastos: totalExpensesMonth, balance: balanceMonth, isCurrent: true },
+  ];
+
+  const balanceData = [
+    { name: "Cobrado", value: totalSalesMonth },
+    { name: "Gastos", value: totalExpensesMonth },
+  ];
+
+  const dailySalesComparison = [
+    { label: "Ayer", value: salesYesterdayValue },
+    { label: "Hoy", value: totalSalesToday },
   ];
 
   const displayName = getUserDisplayName(user, profile);
@@ -674,9 +805,9 @@ export default async function DashboardPage() {
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <StatCard
-              title="Ventas de hoy"
+              title="Cobrado hoy"
               value={formatCurrency(totalSalesToday)}
-              subtitle="Ingresos registrados hoy."
+              subtitle="Dinero recibido hoy."
             />
             <StatCard
               title="Gastos de hoy"
@@ -708,7 +839,7 @@ export default async function DashboardPage() {
             </div>
           </div>
           <p className="mt-2 text-sm text-app-muted">
-            Ventas y gastos mezclados en una sola línea de tiempo.
+            Ventas, pagos y gastos mezclados en una sola línea de tiempo.
           </p>
           <div className="mt-4 space-y-3">
             {recentMovements.length > 0 ? (
@@ -774,7 +905,7 @@ export default async function DashboardPage() {
               dailySalesComparison={dailySalesComparison}
               trendData={trendData}
               monthlyData={monthlyData}
-              chartSales={chartSales}
+              chartSales={collectedChartSales}
               chartSaleItems={chartSaleItems}
               today={today}
               monthStart={startStr}
