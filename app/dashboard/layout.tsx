@@ -274,7 +274,7 @@ export default async function DashboardLayout({
       <InactivityLogout />
       <section className="h-full w-full p-2 sm:p-3">
         <NavigationProvider>
-          <div className="flex h-full min-h-0 gap-3">
+          <div className="flex h-full min-h-0 w-full min-w-0 gap-3">
             <DashboardSidebar
               activeCompanyId={activeCompany.id}
               activeCompanyName={activeCompanyName}
@@ -284,8 +284,8 @@ export default async function DashboardLayout({
               isGlobalAdmin={isGlobalAdmin}
             />
 
-            <div className="relative app-panel flex min-h-0 flex-1 flex-col rounded-[28px] px-3 pb-3 sm:px-4 sm:pb-4 lg:px-5 lg:pb-5">
-              <div className="grid h-12 shrink-0 grid-cols-[40px_1fr_40px] items-center md:hidden">
+            <div className="relative app-panel flex min-h-0 min-w-0 flex-1 flex-col rounded-[28px] px-3 pb-3 sm:px-4 sm:pb-4 lg:px-5 lg:pb-5">
+              <div className="grid h-12 min-w-0 shrink-0 grid-cols-[40px_minmax(0,1fr)_40px] items-center md:hidden">
                 <MobileSidebar
                   activeCompanyId={activeCompany.id}
                   activeCompanyName={activeCompanyName}
@@ -294,8 +294,8 @@ export default async function DashboardLayout({
                   needsInventory={Boolean((activeCompany as { needs_inventory?: boolean }).needs_inventory)}
                   isGlobalAdmin={isGlobalAdmin}
                 />
-                <div className="flex min-w-0 justify-center">
-                  <div className="relative h-8 w-[104px] overflow-hidden">
+                <div className="flex min-w-0 justify-center overflow-hidden">
+                  <div className="relative h-8 w-[104px] max-w-full overflow-hidden">
                     <Image
                       src="/logo/monexity-logotype-light.svg"
                       alt="MONEXITY"
@@ -312,7 +312,7 @@ export default async function DashboardLayout({
                     />
                   </div>
                 </div>
-                <div className="flex justify-end">
+                <div className="flex shrink-0 justify-end">
                   <MobileCompanyAvatar
                     companyName={activeCompanyName}
                     logoUrl={activeCompanyLogoUrl}

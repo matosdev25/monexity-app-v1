@@ -375,7 +375,7 @@ async function generatePdfBlob(data: PdfData): Promise<Blob> {
   // ── Plan de cuotas ─────────────────────────────────────────────────────────
   if (data.hasPaymentPlan) {
     const ps = data.planSummary;
-    if (ps && ps.pending_count > 0) {
+    if (ps) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       doc.setTextColor(99, 102, 241);
@@ -383,9 +383,15 @@ async function generatePdfBlob(data: PdfData): Promise<Blob> {
       const planRows: [string, string][] = [
         ["Frecuencia", fmtFrequency(ps.frequency)],
         ["Por cuota", fmt$(ps.installment_amount)],
-        ["Restantes", String(ps.pending_count)],
+        ["Cuotas pendientes", String(ps.pending_count)],
+        ["Restantes", fmt$(ps.pending_amount)],
       ];
-      if (ps.next_due_date) planRows.push(["Proxima cuota", fmtLongDate(ps.next_due_date)]);
+      planRows.push([
+        "Proxima cuota",
+        ps.next_due_date
+          ? `${ps.next_installment_number ? `#${ps.next_installment_number} - ` : ""}${fmtLongDate(ps.next_due_date)}`
+          : "Sin cuotas pendientes",
+      ]);
       let py = y + 9;
       for (const [label, val] of planRows) {
         doc.setFont("helvetica", "normal");
@@ -598,7 +604,7 @@ const InvoicePreview = React.memo(
                     <p className="text-sm text-slate-800">
                       <span className="text-slate-500">Plan de cuotas:</span> Sí
                     </p>
-                    {planSummary && planSummary.pending_count > 0 ? (
+                    {planSummary ? (
                       <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-800">
                         <p className="text-[10px] uppercase tracking-[0.16em] text-indigo-600 dark:text-indigo-400">
                           Cuotas pendientes
@@ -613,15 +619,19 @@ const InvoicePreview = React.memo(
                             {fmt$(planSummary.installment_amount)}
                           </p>
                           <p className="text-sm text-slate-800">
-                            <span className="text-slate-500">Restantes:</span>{" "}
+                            <span className="text-slate-500">Cuotas pendientes:</span>{" "}
                             {planSummary.pending_count}
                           </p>
-                          {planSummary.next_due_date ? (
-                            <p className="text-sm text-slate-800">
-                              <span className="text-slate-500">Próxima:</span>{" "}
-                              {fmtLongDate(planSummary.next_due_date)}
-                            </p>
-                          ) : null}
+                          <p className="text-sm text-slate-800">
+                            <span className="text-slate-500">Restantes:</span>{" "}
+                            {fmt$(planSummary.pending_amount)}
+                          </p>
+                          <p className="text-sm text-slate-800">
+                            <span className="text-slate-500">Próxima:</span>{" "}
+                            {planSummary.next_due_date
+                              ? `${planSummary.next_installment_number ? `#${planSummary.next_installment_number} - ` : ""}${fmtLongDate(planSummary.next_due_date)}`
+                              : "Sin cuotas pendientes"}
+                          </p>
                         </div>
                       </div>
                     ) : null}

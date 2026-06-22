@@ -249,7 +249,8 @@ function hasPositiveValues(data: Array<{ value?: number; ventas?: number; gastos
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
 
-const chartCardClass = "app-card rounded-[24px] p-4";
+const chartCardClass = "app-card w-full min-w-0 max-w-full overflow-hidden rounded-[24px] p-4";
+const chartFrameClass = "mt-4 min-w-0 max-w-full overflow-hidden";
 
 function ChartSkeleton({ height }: { height: number }) {
   return (
@@ -281,7 +282,7 @@ function CustomTooltip({
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div
-      className="min-w-40 rounded-2xl border px-3 py-2 shadow-[0_12px_28px_rgba(15,23,42,0.14)] backdrop-blur-md"
+      className="max-w-[calc(100vw-3rem)] rounded-2xl border px-3 py-2 shadow-[0_12px_28px_rgba(15,23,42,0.14)] backdrop-blur-md"
       style={{ background: theme.surfaceStrong, borderColor: theme.borderSoft }}
     >
       {label && (
@@ -334,7 +335,7 @@ function RangeFilterSelector({
     <div
       role="group"
       aria-label="Rango de tiempo"
-      className="flex max-w-full shrink-0 gap-0.5 overflow-x-auto rounded-xl border border-app bg-app-soft p-0.5"
+      className="flex w-full max-w-full gap-0.5 overflow-x-auto rounded-xl border border-app bg-app-soft p-0.5 sm:w-auto sm:shrink-0"
     >
       {RANGE_OPTIONS.map((opt) => (
         <button
@@ -375,7 +376,7 @@ function MetricsSelector({
     <div
       role="group"
       aria-label="Métricas a mostrar"
-      className="inline-flex shrink-0 rounded-xl border border-app bg-app-soft p-0.5"
+      className="inline-flex max-w-full overflow-x-auto rounded-xl border border-app bg-app-soft p-0.5 sm:shrink-0"
     >
       {METRICS_OPTIONS.map((opt) => (
         <button
@@ -416,7 +417,7 @@ function CompareMetricSelector({
     <div
       role="group"
       aria-label="Métrica comparativa"
-      className="inline-flex shrink-0 rounded-xl border border-app bg-app-soft p-0.5"
+      className="inline-flex max-w-full overflow-x-auto rounded-xl border border-app bg-app-soft p-0.5 sm:shrink-0"
     >
       {COMPARE_OPTIONS.map((opt) => (
         <button
@@ -458,12 +459,12 @@ function PieBalanceChart({
 
   return (
     <div className={chartCardClass}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-sm font-medium text-app-muted">Balance general del mes</p>
           <p
             className={[
-              "mt-1 text-2xl font-semibold tracking-tight",
+              "mt-1 break-words text-2xl font-semibold tracking-tight",
               positiveBalance
                 ? "text-emerald-600 dark:text-emerald-300"
                 : "text-red-600 dark:text-red-300",
@@ -474,7 +475,7 @@ function PieBalanceChart({
         </div>
       </div>
 
-      <div ref={ref} className="mt-4 h-60">
+      <div ref={ref} className={`${chartFrameClass} h-60`}>
         {!hasData ? (
           <EmptyChartState message="Aún no hay cobros ni gastos del mes para graficar." />
         ) : width ? (
@@ -505,16 +506,16 @@ function PieBalanceChart({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-[18px] bg-emerald-500/10 px-3 py-2 dark:bg-emerald-500/14">
+      <div className="grid min-w-0 grid-cols-2 gap-3">
+        <div className="min-w-0 rounded-[18px] bg-emerald-500/10 px-3 py-2 dark:bg-emerald-500/14">
           <p className="text-xs text-app-muted">Cobrado</p>
-          <p className="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+          <p className="mt-1 break-words text-sm font-semibold text-emerald-700 dark:text-emerald-300">
             {formatCurrency(salesMonth)}
           </p>
         </div>
-        <div className="rounded-[18px] bg-red-500/10 px-3 py-2 dark:bg-red-500/14">
+        <div className="min-w-0 rounded-[18px] bg-red-500/10 px-3 py-2 dark:bg-red-500/14">
           <p className="text-xs text-app-muted">Gastos</p>
-          <p className="mt-1 text-sm font-semibold text-red-700 dark:text-red-300">
+          <p className="mt-1 break-words text-sm font-semibold text-red-700 dark:text-red-300">
             {formatCurrency(expensesMonth)}
           </p>
         </div>
@@ -535,7 +536,7 @@ function DailyBarChart({ data }: { data: DailyComparisonItem[] }) {
         <p className="mt-1 text-sm text-app-muted">Comparación rápida del dinero recibido.</p>
       </div>
 
-      <div ref={ref} className="mt-4 h-70">
+      <div ref={ref} className={`${chartFrameClass} h-70`}>
         {!hasData ? (
           <EmptyChartState message="No hay cobros registrados entre hoy y ayer." />
         ) : width ? (
@@ -600,7 +601,7 @@ function TrendLineChart({
 
   return (
     <div className={chartCardClass}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-medium text-app-muted">
             Flujo de {range} días
@@ -608,12 +609,12 @@ function TrendLineChart({
           <p className="mt-1 text-sm text-app-muted capitalize">{metricLabel}</p>
         </div>
 
-        <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+        <div className="flex max-w-full flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2">
           <MetricsSelector value={metrics} onChange={onMetricsChange} />
         </div>
       </div>
 
-      <div ref={ref} className="mt-4 h-70">
+      <div ref={ref} className={`${chartFrameClass} h-70`}>
         {!hasData ? (
           <EmptyChartState message="No hay movimientos suficientes en este rango." />
         ) : width ? (
@@ -689,7 +690,7 @@ function PaymentMethodsChart({ data }: { data: Array<{ name: string; value: numb
         <p className="mt-1 text-sm text-app-muted">Dónde está entrando el dinero.</p>
       </div>
 
-      <div ref={ref} className="mt-4 h-64">
+      <div ref={ref} className={`${chartFrameClass} h-64`}>
         {!hasData ? (
           <EmptyChartState message="No hay cobros con método de pago en este rango." />
         ) : width ? (
@@ -736,7 +737,7 @@ function TopProductsChart({ data }: { data: Array<{ name: string; value: number 
         <p className="mt-1 text-sm text-app-muted">Top por cantidad vendida.</p>
       </div>
 
-      <div ref={ref} className="mt-4 h-70">
+      <div ref={ref} className={`${chartFrameClass} h-70`}>
         {!hasData ? (
           <EmptyChartState message="No hay ítems de venta en este rango." />
         ) : width ? (
@@ -758,7 +759,7 @@ function TopProductsChart({ data }: { data: Array<{ name: string; value: number 
             <YAxis
               type="category"
               dataKey="name"
-              width={96}
+              width={width < 380 ? 72 : 96}
               tickLine={false}
               axisLine={false}
               tick={{ fill: theme.textMuted, fontSize: 12 }}
@@ -806,7 +807,7 @@ function ComparisonBarChart({
 
   return (
     <div className={chartCardClass}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
           <div>
             <p className="text-sm font-medium text-app-muted">Comparativo mensual</p>
@@ -826,10 +827,12 @@ function ComparisonBarChart({
             </span>
           )}
         </div>
-        <CompareMetricSelector value={metric} onChange={onMetricChange} />
+          <div className="max-w-full">
+            <CompareMetricSelector value={metric} onChange={onMetricChange} />
+          </div>
       </div>
 
-      <div ref={ref} className="mt-4 h-70">
+      <div ref={ref} className={`${chartFrameClass} h-70`}>
         {width ? (
           <BarChart width={width} height={280} data={chartData} barSize={42}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.borderSoft} />
@@ -936,9 +939,9 @@ export function DashboardInsightsCharts({
     .slice(0, 5);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-app-muted">
+    <div className="min-w-0 max-w-full space-y-4 overflow-hidden">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="min-w-0 text-sm text-app-muted">
           Rango activo: <span className="font-semibold text-app">{rangeMeta.label}</span>
         </p>
         <RangeFilterSelector
@@ -947,7 +950,7 @@ export function DashboardInsightsCharts({
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid min-w-0 max-w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       {!hidden.has("balance-pie") && (
         <PieBalanceChart
           balanceData={balanceData}
@@ -981,7 +984,7 @@ export function DashboardInsightsCharts({
         />
       )}
       {prefsLoaded && visibleCount === 0 && (
-        <div className="col-span-2 flex flex-col items-center justify-center rounded-[24px] border border-dashed border-app bg-app-soft py-12 text-center">
+        <div className="flex min-w-0 flex-col items-center justify-center rounded-[24px] border border-dashed border-app bg-app-soft py-12 text-center xl:col-span-2">
           <p className="text-sm font-medium text-app-muted">No hay widgets visibles.</p>
           <p className="mt-1 text-xs text-app-soft">
             Actívalos desde Mi negocio → General → Dashboard.

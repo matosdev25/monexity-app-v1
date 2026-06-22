@@ -1969,36 +1969,91 @@ export type SalePlanSummary = {
   frequency: string;
   installment_amount: number;
   pending_count: number;
+  pending_amount: number;
   next_due_date: string | null;
+  next_installment_number: number | null;
 };
 
 export async function fetchSalePlan(saleId: string): Promise<SalePlanSummary | null> {
   const context = await getSalesContext();
   if (context.error || !context.companyId || !saleId) return null;
 
-  const { data: plan } = await context.supabase
-    .from("sale_payment_plans")
-    .select("frequency, installment_amount")
-    .eq("sale_id", saleId)
-    .eq("company_id", context.companyId)
-    .maybeSingle();
+  const [{ data: sale }, { data: plan }, { data: payments }, { data: installments }] = await Promise.all([
+    context.supabase
+      .from("sales")
+      .select("amount, paid_amount, balance_due, payment_type, has_payment_plan")
+      .eq("id", saleId)
+      .eq("company_id", context.companyId)
+      .maybeSingle(),
+    context.supabase
+      .from("sale_payment_plans")
+      .select("frequency, installment_amount, down_payment_amount")
+      .eq("sale_id", saleId)
+      .eq("company_id", context.companyId)
+      .maybeSingle(),
+    context.supabase
+      .from("sale_payments")
+      .select("amount")
+      .eq("sale_id", saleId)
+      .eq("company_id", context.companyId),
+    context.supabase
+      .from("sale_installments")
+      .select("installment_number, due_date, amount, paid_amount, status")
+      .eq("sale_id", saleId)
+      .eq("company_id", context.companyId)
+      .order("due_date", { ascending: true })
+      .order("installment_number", { ascending: true }),
+  ]);
 
-  if (!plan) return null;
+  if (!sale || !plan) return null;
 
-  const { data: installments } = await context.supabase
-    .from("sale_installments")
-    .select("due_date")
-    .eq("sale_id", saleId)
-    .eq("company_id", context.companyId)
-    .neq("status", "paid")
-    .order("due_date", { ascending: true });
+  const laterPaymentsAmount = roundMoney(
+    (payments ?? []).reduce(
+      (sum: number, payment: { amount: unknown }) =>
+        sum + Number(payment.amount ?? 0),
+      0
+    )
+  );
+  const downPaymentAmount = roundMoney(Number(plan.down_payment_amount ?? 0));
+  const paymentSummary = calculateSalePaymentSummary({
+    sale,
+    paymentsAmount: laterPaymentsAmount,
+    downPaymentAmount,
+  });
 
-  const pending = installments ?? [];
+  let appliedToInstallments = roundMoney(
+    Math.max(0, paymentSummary.collectedAmount - downPaymentAmount)
+  );
+  const cancelledStatuses = new Set(["cancelled", "canceled", "void", "annulled"]);
+
+  const pending = (installments ?? []).flatMap((installment) => {
+    const status = String(installment.status ?? "").toLowerCase();
+    const amount = roundMoney(Number(installment.amount ?? 0));
+    const storedPaid = roundMoney(Number(installment.paid_amount ?? 0));
+    const paidFromPayments = roundMoney(Math.min(amount, Math.max(0, appliedToInstallments)));
+    appliedToInstallments = roundMoney(Math.max(0, appliedToInstallments - amount));
+
+    if (status === "paid" || cancelledStatuses.has(status)) return [];
+
+    const effectivePaid = roundMoney(Math.max(storedPaid, paidFromPayments));
+    const pendingAmount = roundMoney(Math.max(0, amount - effectivePaid));
+    if (pendingAmount <= 0) return [];
+
+    return [{
+      installment_number: Number(installment.installment_number ?? 0),
+      due_date: String(installment.due_date ?? ""),
+      pending_amount: pendingAmount,
+    }];
+  });
+
+  const next = pending[0] ?? null;
 
   return {
     frequency: String(plan.frequency ?? ""),
     installment_amount: Number(plan.installment_amount ?? 0),
     pending_count: pending.length,
-    next_due_date: pending[0]?.due_date ?? null,
+    pending_amount: paymentSummary.pendingBalance,
+    next_due_date: next?.due_date || null,
+    next_installment_number: next?.installment_number || null,
   };
 }

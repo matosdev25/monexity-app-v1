@@ -130,7 +130,7 @@ const cardClass =
   "rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)] transition-colors [content-visibility:auto] [contain-intrinsic-size:220px] hover:border-sky-200/80 dark:border-slate-700 dark:bg-slate-950/70 dark:shadow-none dark:hover:border-cyan-400/25";
 
 const chipBase =
-  "inline-flex rounded-full border px-3 py-1 text-xs uppercase tracking-[0.16em]";
+  "inline-flex max-w-full rounded-full border px-3 py-1 text-xs uppercase tracking-[0.16em]";
 
 const defaultTriggerClass =
   "rounded-2xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 transition-colors duration-150 hover:border-sky-300 hover:bg-sky-100 dark:border-cyan-400/25 dark:bg-cyan-400/10 dark:text-cyan-200 dark:hover:bg-cyan-400/15";
@@ -317,12 +317,12 @@ export function SalesHistoryModal({
 
             <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-4">
               <div
-                className={`${panelClass} relative flex h-[92dvh] max-h-[920px] w-full max-w-6xl flex-col overflow-hidden sm:h-[88vh]`}
+                className={`${panelClass} relative flex h-[92dvh] max-h-[920px] w-full max-w-[calc(100vw-1rem)] flex-col overflow-hidden sm:h-[88vh] sm:max-w-6xl`}
               >
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                   <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/95 sm:px-5">
                     <div className="flex items-start justify-between gap-4">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-cyan-300">
                           Historial completo
                         </p>
@@ -360,7 +360,7 @@ export function SalesHistoryModal({
 
                   <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800 sm:px-5">
 	                    <div className="space-y-3">
-	                      <div className="grid grid-cols-2 gap-3">
+	                      <div className="grid gap-3 sm:grid-cols-2">
 	                        <div>
 	                          <label className={labelClass}>Desde</label>
 	                          <input
@@ -382,7 +382,7 @@ export function SalesHistoryModal({
 	                        </div>
 	                      </div>
 
-	                      <div className="grid grid-cols-2 gap-3">
+	                      <div className="grid gap-3 sm:grid-cols-2">
 	                        <button
 	                          type="button"
 	                          onClick={handleApplyFilters}
@@ -401,7 +401,7 @@ export function SalesHistoryModal({
 	                      </div>
 
 	                      {/* Filtro de estado */}
-	                      <div className="flex flex-wrap gap-1.5">
+	                      <div className="flex min-w-0 flex-wrap gap-1.5">
 	                        {(["all", "pending", "partial", "paid"] as const).map((s) => {
 	                          const labels = { all: "Todas", pending: "Pendientes", partial: "Abonadas", paid: "Pagadas" };
 	                          const active = statusFilter === s;

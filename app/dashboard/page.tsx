@@ -39,10 +39,10 @@ const CreateExpenseQuickModal = dynamic(() =>
 );
 
 const sectionLabelClass = "section-label";
-const mainSectionCardClass = "app-panel rounded-[30px] p-5";
-const statCardClass = "app-card rounded-[24px] p-4";
-const movementCardClass = "app-card rounded-[24px] px-4 py-3";
-const shortcutTriggerClass = "app-card-interactive group rounded-[20px] p-3";
+const mainSectionCardClass = "app-panel min-w-0 max-w-full rounded-[30px] p-5";
+const statCardClass = "app-card min-w-0 max-w-full rounded-[24px] p-4";
+const movementCardClass = "app-card min-w-0 max-w-full rounded-[24px] px-4 py-3";
+const shortcutTriggerClass = "app-card-interactive group min-w-0 max-w-full rounded-[20px] p-3";
 const actionLinkClass = "app-button-soft";
 
 type RecentMovement = {
@@ -86,6 +86,11 @@ type CollectedPaymentRow = {
 type CollectedPaymentPlanRow = {
   sale_id: string;
   down_payment_amount: number | string | null;
+};
+
+type CollectedPaymentTotalRow = {
+  sale_id: string;
+  amount: number | string | null;
 };
 
 type CollectedEvent = {
@@ -163,20 +168,32 @@ function getCollectedEvents(params: {
   sales: CollectedSaleRow[];
   payments: CollectedPaymentRow[];
   plans: CollectedPaymentPlanRow[];
+  paymentTotals: CollectedPaymentTotalRow[];
 }) {
-  const { sales, payments, plans } = params;
+  const { sales, payments, plans, paymentTotals } = params;
   const downPaymentsBySaleId = new Map(
     plans.map((plan) => [
       String(plan.sale_id),
       Number(plan.down_payment_amount ?? 0),
     ])
   );
+  const laterPaymentsBySaleId = new Map<string, number>();
+
+  for (const payment of paymentTotals) {
+    const saleId = String(payment.sale_id);
+    const current = laterPaymentsBySaleId.get(saleId) ?? 0;
+    laterPaymentsBySaleId.set(saleId, current + Number(payment.amount ?? 0));
+  }
 
   const saleEvents: CollectedEvent[] = sales.flatMap((sale) => {
     const installment = isInstallmentSale(sale);
     const amount = installment
       ? Number(downPaymentsBySaleId.get(sale.id) ?? 0)
-      : Number(sale.paid_amount ?? 0);
+      : Math.max(
+          0,
+          Number(sale.paid_amount ?? 0) -
+            Number(laterPaymentsBySaleId.get(sale.id) ?? 0)
+        );
 
     if (!Number.isFinite(amount) || amount <= 0) return [];
 
@@ -311,7 +328,7 @@ function StatCard({
   return (
     <div className={statCardClass}>
       <p className="text-sm font-medium text-app-muted">{title}</p>
-      <p className={`mt-3 text-2xl font-semibold tracking-tight ${valueColor}`}>
+      <p className={`mt-3 break-words text-2xl font-semibold tracking-tight ${valueColor}`}>
         {value}
       </p>
       <p className="mt-1.5 text-sm text-app-muted">{subtitle}</p>
@@ -322,12 +339,12 @@ function StatCard({
 function ShortcutTriggerCard({ title, description }: { title: string; description: string }) {
   return (
     <div className={shortcutTriggerClass}>
-      <div className="flex items-start justify-between gap-2">
-        <div>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
           <p className="text-sm font-semibold leading-5 text-app">{title}</p>
           <p className="mt-0.5 text-xs leading-5 text-app-muted">{description}</p>
         </div>
-        <span className="rounded-full border border-app bg-app-soft px-2 py-0.5 text-[11px] text-app-muted transition-colors duration-150 group-hover:border-app-strong group-hover:text-app">
+        <span className="shrink-0 rounded-full border border-app bg-app-soft px-2 py-0.5 text-[11px] text-app-muted transition-colors duration-150 group-hover:border-app-strong group-hover:text-app">
           Abrir
         </span>
       </div>
@@ -337,7 +354,7 @@ function ShortcutTriggerCard({ title, description }: { title: string; descriptio
 
 function ActionLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className={actionLinkClass}>
+    <Link href={href} className={`${actionLinkClass} min-w-0 max-w-full`}>
       {label}
     </Link>
   );
@@ -572,7 +589,11 @@ export default async function DashboardPage() {
     .filter(Boolean);
   const relatedSaleIds = Array.from(new Set([...collectedSaleIds, ...recentPaymentSaleIds]));
 
-  const [{ data: collectedPaymentPlansData }, { data: recentPaymentSalesData }] = await Promise.all([
+  const [
+    { data: collectedPaymentPlansData },
+    { data: recentPaymentSalesData },
+    { data: collectedPaymentTotalsData },
+  ] = await Promise.all([
     collectedSaleIds.length > 0
       ? supabase
           .from("sale_payment_plans")
@@ -587,12 +608,20 @@ export default async function DashboardPage() {
           .eq("company_id", membership.company_id)
           .in("id", relatedSaleIds)
       : Promise.resolve({ data: [] }),
+    collectedSaleIds.length > 0
+      ? supabase
+          .from("sale_payments")
+          .select("sale_id, amount")
+          .eq("company_id", membership.company_id)
+          .in("sale_id", collectedSaleIds)
+      : Promise.resolve({ data: [] }),
   ]);
 
   const collectedEvents = getCollectedEvents({
     sales: (collectedSalesData ?? []) as CollectedSaleRow[],
     payments: (collectedPaymentsData ?? []) as CollectedPaymentRow[],
     plans: (collectedPaymentPlansData ?? []) as CollectedPaymentPlanRow[],
+    paymentTotals: (collectedPaymentTotalsData ?? []) as CollectedPaymentTotalRow[],
   });
 
   const chartSales: DashboardChartSale[] = (chartSalesData ?? []).map((sale) => ({
@@ -602,7 +631,14 @@ export default async function DashboardPage() {
     saleDate: sale.sale_date,
   }));
 
-  const chartSaleIds = chartSales.map((sale) => sale.id);
+  const chartSaleIds = Array.from(
+    new Set([
+      ...chartSales.map((sale) => sale.id),
+      ...collectedEvents
+        .filter((event) => event.date >= chartStart && event.date < tomorrow)
+        .map((event) => event.saleId),
+    ])
+  );
 
   const [{ data: chartSaleItemsData }] = await Promise.all([
     chartSaleIds.length > 0
@@ -762,9 +798,9 @@ export default async function DashboardPage() {
   const companyLogo = await resolveLogoUrl(getCompanyLogo(company));
 
   return (
-    <div className="flex min-h-full flex-col gap-4 overflow-x-hidden overflow-y-auto pr-1 text-app">
-      <header className="animate-mx-fade-up shrink-0">
-        <div className="flex items-start justify-between gap-4 sm:gap-6">
+    <div className="flex min-h-full w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden pr-1 text-app">
+      <header className="animate-mx-fade-up min-w-0 shrink-0">
+        <div className="flex min-w-0 items-start justify-between gap-4 sm:gap-6">
           <div className="min-w-0 flex-1">
             <p className={sectionLabelClass}>Panel privado</p>
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-app sm:text-3xl md:text-4xl">
@@ -794,7 +830,7 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      <section className="grid gap-4 xl:grid-cols-[1.45fr_0.95fr]">
+      <section className="grid min-w-0 max-w-full gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]">
         <div className={`${mainSectionCardClass} animate-mx-fade-up [animation-delay:60ms]`}>
           <p className={sectionLabelClass}>Vista general</p>
           <h2 className="mt-2 text-2xl font-semibold text-app">
@@ -803,7 +839,7 @@ export default async function DashboardPage() {
           <p className="mt-2 text-sm text-app-muted">
             Revisa tus números principales.
           </p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-2">
             <StatCard
               title="Cobrado hoy"
               value={formatCurrency(totalSalesToday)}
@@ -830,8 +866,8 @@ export default async function DashboardPage() {
         </div>
 
         <div className={`${mainSectionCardClass} animate-mx-fade-up xl:row-span-2 [animation-delay:80ms]`}>
-          <div className="flex items-center justify-between gap-3">
-            <div>
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <div className="min-w-0">
               <p className={sectionLabelClass}>Actividad reciente</p>
               <h2 className="mt-2 text-2xl font-semibold text-app">
                 Últimos movimientos
@@ -858,7 +894,7 @@ export default async function DashboardPage() {
 
         <div className={`${mainSectionCardClass} animate-mx-fade-up [animation-delay:100ms]`}>
           <h2 className="text-2xl font-semibold text-app">Shortcuts</h2>
-          <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+          <div className="mt-3 grid min-w-0 gap-2.5 sm:grid-cols-2">
             <CreateSaleQuickModal
               today={today}
               paymentMethods={paymentMethods}
@@ -883,13 +919,13 @@ export default async function DashboardPage() {
               }
             />
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
             <ActionLink href="/dashboard/sales" label="Ver ventas" />
             <ActionLink href="/dashboard/expenses" label="Ver gastos" />
           </div>
         </div>
 
-        <div className="animate-mx-fade-up xl:col-span-2 [animation-delay:140ms]">
+        <div className="animate-mx-fade-up min-w-0 max-w-full xl:col-span-2 [animation-delay:140ms]">
           <div className={mainSectionCardClass}>
             <div className="mb-4">
               <p className={sectionLabelClass}>Insights visuales</p>

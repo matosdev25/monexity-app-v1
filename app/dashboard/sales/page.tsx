@@ -226,6 +226,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
         customer_email,
         customer_phone,
         amount,
+        discount_amount,
         paid_amount,
         balance_due,
         payment_method,
