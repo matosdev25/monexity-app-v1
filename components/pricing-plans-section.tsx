@@ -91,13 +91,15 @@ function getExcludedFeatures(plan: Plan) {
 export function PricingPlansSection({ plans, signupHref }: PricingPlansSectionProps) {
   return (
     <div className="grid gap-4 md:grid-cols-3">
-      {plans.map((plan) => {
+      {plans.map((plan, index) => {
         const excludedFeatures = getExcludedFeatures(plan);
         const includedFeatures = getIncludedFeatures(plan);
 
         return (
           <div
             key={plan.id}
+            data-reveal=""
+            data-reveal-step={Math.min(index, 5)}
             className={[
               "relative flex flex-col rounded-[28px] p-6",
               plan.highlight

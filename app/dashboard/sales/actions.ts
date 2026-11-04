@@ -20,6 +20,10 @@ type ActionState = {
   success: boolean;
   message: string;
   timestamp?: number;
+  // ACCOUNT_INACTIVE: canAccessCompanyApp negó el acceso (la UI muestra el popup de facturación)
+  code?: "ACCOUNT_INACTIVE";
+  // Solo con ACCOUNT_INACTIVE: true si el usuario es owner (puede abrir /dashboard/billing)
+  canManageBilling?: boolean;
 };
 
 type SalePaymentRow = {
@@ -137,6 +141,18 @@ function ok(message: string): ActionState {
     message,
     timestamp: Date.now(),
   };
+}
+
+// Rechazo por contexto: distingue la cuenta inactiva (código) del resto de errores
+function failContext(context: {
+  error?: string | null;
+  accountInactive?: boolean;
+  canManageBilling?: boolean;
+}): ActionState {
+  const result = fail(context.error ?? "No se pudo validar el usuario.");
+  return context.accountInactive
+    ? { ...result, code: "ACCOUNT_INACTIVE", canManageBilling: context.canManageBilling === true }
+    : result;
 }
 
 function fail(message: string): ActionState {
@@ -311,6 +327,9 @@ async function getSalesContext() {
       userId: user.id,
       companyId: null,
       error: "Tu cuenta necesita pago activo para usar ventas.",
+      accountInactive: true,
+      // Misma regla que app/dashboard/layout.tsx: solo el owner accede a Facturación
+      canManageBilling: String(membership.role ?? "").toLowerCase() === "owner",
     };
   }
 
@@ -351,6 +370,26 @@ async function getNextInvoiceNumber(
     prefix: "FAC",
     offset,
   });
+}
+
+type RpcError = { code?: string; message?: string; hint?: string } | null;
+
+// Mensajes de la RPC create_sale_with_items que sí se pueden mostrar al usuario
+function getSaleRpcErrorMessage(error: RpcError, fallback: string) {
+  if (!error) return fallback;
+  if (error.hint === "insufficient_stock") return error.message || "Stock insuficiente.";
+  if ((error.code === "22023" || error.code === "42501") && error.message) return error.message;
+  return fallback;
+}
+
+function toSaleItemsPayload(items: SaleItemInput[]) {
+  return items.map((item) => ({
+    description: item.description,
+    quantity: item.quantity,
+    unit_price: item.unit_price,
+    sort_order: item.sort_order,
+    product_id: item.product_id || null,
+  }));
 }
 
 function canManageSalesRecords(role: string | null | undefined) {
@@ -466,6 +505,8 @@ function parseInvoiceItems(
   ]);
   const quantities = getAllStrings(formData, ["itemQuantity", "itemQuantity[]"]);
   const unitPrices = getAllStrings(formData, ["itemUnitPrice", "itemUnitPrice[]"]);
+  // Misma posición que el resto de campos del ítem; vacío = servicio / sin producto
+  const productIds = formData.getAll("productId[]").map((v) => String(v ?? "").trim());
 
   const rowCount = Math.max(
     descriptions.length,
@@ -521,6 +562,7 @@ function parseInvoiceItems(
       quantity: roundMoney(quantity),
       unit_price: roundMoney(unitPrice),
       sort_order: index,
+      product_id: productIds[index] || null,
     });
   }
 
@@ -684,6 +726,38 @@ async function insertSaleItems(params: {
   return { error };
 }
 
+// Ítems de una venta vinculados a inventario (product_id). Si existen, la edición
+// no puede reemplazarlos: se perdería la asociación y no se restauraría el stock.
+async function getInventoryLinkedItems(params: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  saleId: string;
+  companyId: string;
+}): Promise<{ linked: boolean; subtotal: number; error: string | null }> {
+  const { supabase, saleId, companyId } = params;
+
+  const { data, error } = await supabase
+    .from("sale_items")
+    .select("quantity, unit_price, product_id")
+    .eq("sale_id", saleId)
+    .eq("company_id", companyId);
+
+  if (error) {
+    return { linked: false, subtotal: 0, error: "No se pudieron validar los ítems de la venta." };
+  }
+
+  const rows = data ?? [];
+  return {
+    linked: rows.some((row) => Boolean(row.product_id)),
+    subtotal: roundMoney(
+      rows.reduce((sum, row) => sum + Number(row.quantity ?? 0) * Number(row.unit_price ?? 0), 0)
+    ),
+    error: null,
+  };
+}
+
+const INVENTORY_LINKED_EDIT_ERROR =
+  "Esta venta incluye productos de inventario: no se puede cambiar su monto. Elimínala y regístrala de nuevo.";
+
 async function replaceSaleItems(params: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   saleId: string;
@@ -750,13 +824,15 @@ export async function createSaleWithPlan(
   const context = await getSalesContext();
 
   if (context.error || !context.companyId || !context.userId) {
-    return fail(context.error ?? "No se pudo validar el usuario.");
+    return failContext(context);
   }
 
   const customerName = getString(formData, "customerName");
   const customerCompany = getString(formData, "customerCompany");
   const customerEmail = getString(formData, "customerEmail");
   const customerPhone = getString(formData, "customerPhone");
+  const customerRuc = getString(formData, "customerRuc").slice(0, 40);
+  const customerDv = getString(formData, "customerDv").slice(0, 4);
 
   const amountRaw = getString(formData, "amount");
   const paymentMethod = normalizePaymentMethod(getString(formData, "paymentMethod"));
@@ -825,99 +901,61 @@ export async function createSaleWithPlan(
   const noteValue =
     note || invoiceNotes || parsedItems.items[0]?.description || null;
 
-  const { data, error } = await context.supabase.rpc("create_sale_with_plan", {
-    p_company_id: context.companyId,
-    p_created_by: context.userId,
-    p_customer_name: customerName || null,
-    p_customer_email: customerEmail || null,
-    p_customer_phone: customerPhone || null,
-    p_amount: finalAmount,
-    p_payment_method: paymentMethod,
-    p_payment_type: "installment",
-    p_sale_date: saleDate,
-    p_payment_date: paymentDate || null,
-    p_note: noteValue,
-    p_invoice_notes: invoiceNotes || null,
-    p_down_payment_amount: plan.downPaymentAmount,
-    p_plan_name: plan.planName,
-    p_frequency: plan.frequency,
-    p_installment_amount: plan.installmentAmount,
-    p_installments_count: plan.installmentsCount,
-    p_start_date: plan.startDate,
-    p_plan_notes: plan.planNotes,
-  });
-
-  if (error) {
-    return fail(error.message || "No se pudo crear la venta con plan.");
-  }
-
-  const result = Array.isArray(data) ? data[0] : data;
-  const saleId =
-    result && typeof result === "object" && "sale_id" in result
-      ? String(result.sale_id)
-      : "";
-
-  if (!saleId) {
-    return fail("La venta se creó sin devolver un identificador válido.");
-  }
-
-  let invoiceAssigned = false;
+  // Venta + plan + cuotas + ítems + stock en una sola transacción (RPC).
+  // Si el número de factura choca, la RPC revierte todo y se reintenta.
+  let rpcError: RpcError = null;
   for (let attempt = 0; attempt < DOCUMENT_NUMBER_RETRIES; attempt += 1) {
-    const invoiceNumberPlan = await getNextInvoiceNumber(context, attempt);
-    const { error: updateNumberError } = await context.supabase
-      .from("sales")
-      .update({
-        invoice_number: invoiceNumberPlan,
-        customer_company: customerCompany || null,
-        discount_amount: discountAmount,
-      })
-      .eq("id", saleId)
-      .eq("company_id", context.companyId);
-
-    if (!updateNumberError) {
-      invoiceAssigned = true;
-      break;
-    }
-
-    if (!isDuplicateDocumentNumberError(updateNumberError)) {
-      await context.supabase
-        .from("sales")
-        .delete()
-        .eq("id", saleId)
-        .eq("company_id", context.companyId);
+    let invoiceNumber: string;
+    try {
+      invoiceNumber = await getNextInvoiceNumber(context, attempt);
+    } catch {
       return fail("No se pudo generar el número del documento. Intenta nuevamente.");
     }
+    const { error } = await context.supabase.rpc("create_sale_with_items", {
+      p_company_id: context.companyId,
+      p_invoice_number: invoiceNumber,
+      p_sale: {
+        customer_name: customerName || null,
+        customer_company: customerCompany || null,
+        customer_email: customerEmail || null,
+        customer_phone: customerPhone || null,
+        customer_ruc: customerRuc || null,
+        customer_dv: customerDv || null,
+        amount: finalAmount,
+        discount_amount: discountAmount,
+        payment_method: paymentMethod,
+        sale_date: saleDate,
+        payment_date: paymentDate || null,
+        note: noteValue,
+        invoice_notes: invoiceNotes || null,
+      },
+      p_items: toSaleItemsPayload(parsedItems.items),
+      p_plan: {
+        down_payment_amount: plan.downPaymentAmount,
+        plan_name: plan.planName,
+        frequency: plan.frequency,
+        installment_amount: plan.installmentAmount,
+        installments_count: plan.installmentsCount,
+        start_date: plan.startDate,
+        plan_notes: plan.planNotes,
+      },
+    });
+
+    rpcError = error;
+    if (!error) break;
+    if (!isDuplicateDocumentNumberError(error)) break;
   }
 
-  if (!invoiceAssigned) {
-    await context.supabase
-      .from("sales")
-      .delete()
-      .eq("id", saleId)
-      .eq("company_id", context.companyId);
-    return fail("No se pudo generar el número del documento. Intenta nuevamente.");
+  if (rpcError) {
+    if (isDuplicateDocumentNumberError(rpcError)) {
+      return fail("No se pudo generar el número del documento. Intenta nuevamente.");
+    }
+    return fail(getSaleRpcErrorMessage(rpcError, "No se pudo crear la venta con plan."));
   }
 
-  const { error: insertItemsError } = await insertSaleItems({
-    supabase: context.supabase,
-    saleId,
-    companyId: context.companyId,
-    items: parsedItems.items,
-  });
-
-  if (insertItemsError) {
-    await context.supabase
-      .from("sales")
-      .delete()
-      .eq("id", saleId)
-      .eq("company_id", context.companyId);
-
-    return fail(
-      insertItemsError.message ||
-        "La venta fue creada, pero no se pudieron guardar los ítems."
-    );
+  if (parsedItems.items.some((item) => item.product_id)) {
+    revalidatePath("/dashboard/inventario");
   }
-
   revalidateSalesPages();
   return ok("Venta con plan de pagos registrada correctamente.");
 }
@@ -930,14 +968,17 @@ export async function createSale(
 
   const context = await getSalesContext();
 
+  // Cuenta inactiva: se rechaza antes de validar datos o ejecutar cualquier RPC
   if (context.error || !context.companyId || !context.userId) {
-    return fail(context.error ?? "No se pudo validar el usuario.");
+    return failContext(context);
   }
 
   const customerName = getString(formData, "customerName");
   const customerCompany = getString(formData, "customerCompany");
   const customerEmail = getString(formData, "customerEmail");
   const customerPhone = getString(formData, "customerPhone");
+  const customerRuc = getString(formData, "customerRuc").slice(0, 40);
+  const customerDv = getString(formData, "customerDv").slice(0, 4);
 
   const amountRaw = getString(formData, "amount");
   const paymentMethod = normalizePaymentMethod(getString(formData, "paymentMethod"));
@@ -1010,104 +1051,58 @@ export async function createSale(
   const noteValue =
     note || invoiceNotes || parsedItems.items[0]?.description || null;
 
-  let insertedSale: { id: string } | null = null;
-  let insertSaleError: { code?: string; message?: string } | null = null;
-
+  // Venta + ítems + stock en una sola transacción (RPC). Stock insuficiente,
+  // producto ajeno o cualquier fallo revierte todo. Si el número de factura
+  // choca, la RPC revierte y se reintenta con el siguiente.
+  let rpcError: RpcError = null;
   for (let attempt = 0; attempt < DOCUMENT_NUMBER_RETRIES; attempt += 1) {
-    const invoiceNumber = await getNextInvoiceNumber(context, attempt);
-    const { data, error } = await context.supabase
-      .from("sales")
-      .insert({
-        company_id: context.companyId,
-        created_by: context.userId,
+    let invoiceNumber: string;
+    try {
+      invoiceNumber = await getNextInvoiceNumber(context, attempt);
+    } catch {
+      return fail("No se pudo generar el número del documento. Intenta nuevamente.");
+    }
+    const { error } = await context.supabase.rpc("create_sale_with_items", {
+      p_company_id: context.companyId,
+      p_invoice_number: invoiceNumber,
+      p_sale: {
         customer_name: customerName || null,
         customer_company: customerCompany || null,
         customer_email: customerEmail || null,
         customer_phone: customerPhone || null,
+        customer_ruc: customerRuc || null,
+        customer_dv: customerDv || null,
         amount: finalAmount,
         discount_amount: discountAmount,
         paid_amount: paymentSnapshot.paidAmount,
         balance_due: paymentSnapshot.balanceDue,
         payment_status: paymentSnapshot.paymentStatus,
-        has_payment_plan: false,
         payment_method: paymentMethod,
         payment_type: paymentType,
         sale_date: saleDate,
         payment_date: paymentDate || null,
         note: noteValue,
         invoice_notes: invoiceNotes || null,
-        invoice_number: invoiceNumber,
-      })
-      .select("id")
-      .single();
+      },
+      p_items: toSaleItemsPayload(parsedItems.items),
+      p_plan: null,
+    });
 
-    insertedSale = data;
-    insertSaleError = error;
-
+    rpcError = error;
     if (!error) break;
     if (!isDuplicateDocumentNumberError(error)) break;
   }
 
-  if (insertSaleError || !insertedSale?.id) {
-    return fail("No se pudo generar el número del documento. Intenta nuevamente.");
-  }
-
-  // Asociar product_id a cada ítem por índice (para restaurar stock al eliminar)
-  const productIds = formData.getAll("productId[]").map(String).filter(Boolean);
-  const qtys = formData.getAll("qty[]").map((v) => Math.max(1, Math.floor(Number(String(v)))));
-
-  const itemsWithProducts = parsedItems.items.map((item, i) => ({
-    ...item,
-    product_id: productIds[i] ?? null,
-  }));
-
-  const { error: insertItemsError } = await insertSaleItems({
-    supabase: context.supabase,
-    saleId: insertedSale.id,
-    companyId: context.companyId,
-    items: itemsWithProducts,
-  });
-
-  if (insertItemsError) {
-    await context.supabase
-      .from("sales")
-      .delete()
-      .eq("id", insertedSale.id)
-      .eq("company_id", context.companyId);
-
-    return fail(
-      insertItemsError.message ||
-        "No se pudieron guardar los ítems de la factura."
-    );
-  }
-
-  if (productIds.length > 0) {
-    const { data: soldProducts } = await context.supabase
-      .from("products")
-      .select("id, stock, track_inventory")
-      .in("id", productIds)
-      .eq("company_id", context.companyId);
-
-    const trackedProducts = (soldProducts ?? []).filter((p) => p.track_inventory);
-
-    if (trackedProducts.length > 0) {
-      await Promise.all(
-        trackedProducts.map((product) => {
-          const totalQty = productIds.reduce<number>((sum, pid, idx) => {
-            return pid === product.id ? sum + (qtys[idx] ?? 0) : sum;
-          }, 0);
-          const newStock = Math.max(0, Number(product.stock ?? 0) - totalQty);
-          return context.supabase
-            .from("products")
-            .update({ stock: newStock })
-            .eq("id", product.id)
-            .eq("company_id", context.companyId);
-        })
-      );
-      revalidatePath("/dashboard/inventario");
+  if (rpcError) {
+    if (isDuplicateDocumentNumberError(rpcError)) {
+      return fail("No se pudo generar el número del documento. Intenta nuevamente.");
     }
+    return fail(getSaleRpcErrorMessage(rpcError, "No se pudo registrar la venta."));
   }
 
+  if (parsedItems.items.some((item) => item.product_id)) {
+    revalidatePath("/dashboard/inventario");
+  }
   revalidateSalesPages();
   return ok("Venta registrada correctamente.");
 }
@@ -1204,6 +1199,19 @@ export async function updateSale(
     }
 
     const subtotal = parsedItems.subtotal;
+
+    const inventoryItems = await getInventoryLinkedItems({
+      supabase: context.supabase,
+      saleId,
+      companyId: context.companyId,
+    });
+    if (inventoryItems.error) {
+      return fail(inventoryItems.error);
+    }
+    if (inventoryItems.linked && inventoryItems.subtotal !== subtotal) {
+      return fail(INVENTORY_LINKED_EDIT_ERROR);
+    }
+
     const discountAmountRaw = getString(formData, "discountAmount");
     const discountAmount = Math.max(0, roundMoney(parseMoney(discountAmountRaw)));
     if (discountAmount > 0 && discountAmount >= subtotal) {
@@ -1283,18 +1291,21 @@ export async function updateSale(
       return fail(updatePlanError.message || "No se pudo actualizar el abono inicial.");
     }
 
-    const { error: replaceItemsError } = await replaceSaleItems({
-      supabase: context.supabase,
-      saleId,
-      companyId: context.companyId,
-      items: parsedItems.items,
-    });
+    // Los ítems vinculados a inventario se conservan tal cual (mismo subtotal)
+    if (!inventoryItems.linked) {
+      const { error: replaceItemsError } = await replaceSaleItems({
+        supabase: context.supabase,
+        saleId,
+        companyId: context.companyId,
+        items: parsedItems.items,
+      });
 
-    if (replaceItemsError) {
-      return fail(
-        replaceItemsError.message ||
-          "No se pudieron actualizar los ítems de la factura."
-      );
+      if (replaceItemsError) {
+        return fail(
+          replaceItemsError.message ||
+            "No se pudieron actualizar los ítems de la factura."
+        );
+      }
     }
 
     await recalcSaleTotals(context.supabase, saleId, context.companyId);
@@ -1322,6 +1333,18 @@ export async function updateSale(
   }
 
   const subtotal = parsedItems.subtotal;
+
+  const inventoryItems = await getInventoryLinkedItems({
+    supabase: context.supabase,
+    saleId,
+    companyId: context.companyId,
+  });
+  if (inventoryItems.error) {
+    return fail(inventoryItems.error);
+  }
+  if (inventoryItems.linked && inventoryItems.subtotal !== subtotal) {
+    return fail(INVENTORY_LINKED_EDIT_ERROR);
+  }
 
   const discountAmountRaw = getString(formData, "discountAmount");
   const discountAmount = Math.max(0, roundMoney(parseMoney(discountAmountRaw)));
@@ -1378,18 +1401,21 @@ export async function updateSale(
     return fail("No se encontró la venta a editar.");
   }
 
-  const { error: replaceItemsError } = await replaceSaleItems({
-    supabase: context.supabase,
-    saleId,
-    companyId: context.companyId,
-    items: parsedItems.items,
-  });
+  // Los ítems vinculados a inventario se conservan tal cual (mismo subtotal)
+  if (!inventoryItems.linked) {
+    const { error: replaceItemsError } = await replaceSaleItems({
+      supabase: context.supabase,
+      saleId,
+      companyId: context.companyId,
+      items: parsedItems.items,
+    });
 
-  if (replaceItemsError) {
-    return fail(
-      replaceItemsError.message ||
-        "No se pudieron actualizar los ítems de la factura."
-    );
+    if (replaceItemsError) {
+      return fail(
+        replaceItemsError.message ||
+          "No se pudieron actualizar los ítems de la factura."
+      );
+    }
   }
 
   revalidateSalesPages();
@@ -1879,90 +1905,46 @@ export async function updateSaleInstallmentPlan(
   return ok("Plan de cuotas actualizado correctamente.");
 }
 
-export async function deleteSale(formData: FormData): Promise<void> {
+export async function deleteSale(
+  prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  void prevState;
+
   const context = await getSalesContext();
 
   if (context.error || !context.companyId) {
-    return;
+    return fail(context.error ?? "No se pudo validar el usuario.");
   }
   if (!canManageSalesRecords(context.role)) {
-    return;
+    return fail("No tienes permisos para eliminar ventas.");
   }
 
   const saleId = getString(formData, "saleId");
 
   if (!saleId) {
-    return;
+    return fail("No se encontró la venta a eliminar.");
   }
 
-  // Restaurar stock antes de eliminar los ítems
-  const { data: saleItems } = await context.supabase
-    .from("sale_items")
-    .select("product_id, quantity")
-    .eq("sale_id", saleId)
-    .eq("company_id", context.companyId);
+  // Restaurar stock y eliminar en una sola transacción (RPC): si la
+  // eliminación falla, el inventario no se modifica.
+  const { error: deleteError } = await context.supabase.rpc("delete_sale_with_stock_restore", {
+    p_company_id: context.companyId,
+    p_sale_id: saleId,
+  });
 
-  const itemsWithProduct = (saleItems ?? []).filter(
-    (item): item is { product_id: string; quantity: number } =>
-      Boolean(item.product_id)
-  );
-
-  if (itemsWithProduct.length > 0) {
-    // Agrupar cantidades por product_id
-    const qtyByProduct = new Map<string, number>();
-    for (const item of itemsWithProduct) {
-      qtyByProduct.set(
-        item.product_id,
-        (qtyByProduct.get(item.product_id) ?? 0) + Number(item.quantity)
-      );
-    }
-
-    const productIds = [...qtyByProduct.keys()];
-    const { data: products } = await context.supabase
-      .from("products")
-      .select("id, stock, track_inventory")
-      .in("id", productIds)
-      .eq("company_id", context.companyId);
-
-    const tracked = (products ?? []).filter((p) => p.track_inventory);
-
-    if (tracked.length > 0) {
-      await Promise.all(
-        tracked.map((product) => {
-          const returnQty = qtyByProduct.get(product.id) ?? 0;
-          const newStock = Number(product.stock ?? 0) + returnQty;
-          return context.supabase
-            .from("products")
-            .update({ stock: newStock })
-            .eq("id", product.id)
-            .eq("company_id", context.companyId);
-        })
-      );
-      revalidatePath("/dashboard/inventario");
-    }
+  if (deleteError) {
+    // La RPC revirtió todo (stock y venta intactos); no se reporta como éxito.
+    return fail(
+      deleteError.code === "42501" || deleteError.code === "P0002"
+        ? deleteError.message || "No se pudo eliminar la venta."
+        : "No se pudo eliminar la venta. Intenta nuevamente."
+    );
   }
 
-  const { error: deleteItemsError } = await context.supabase
-    .from("sale_items")
-    .delete()
-    .eq("sale_id", saleId)
-    .eq("company_id", context.companyId);
-
-  if (deleteItemsError) {
-    return;
-  }
-
-  const { error: deleteSaleError } = await context.supabase
-    .from("sales")
-    .delete()
-    .eq("id", saleId)
-    .eq("company_id", context.companyId);
-
-  if (deleteSaleError) {
-    return;
-  }
-
+  revalidatePath("/dashboard/inventario");
   revalidateSalesPages();
+  return ok("Venta eliminada correctamente.");
 }
 
 export type SalePlanSummary = {

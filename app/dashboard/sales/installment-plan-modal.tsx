@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import { createPortal } from "react-dom";
 import { formatCurrency } from "../../../lib/currency-format";
 
@@ -75,6 +76,9 @@ type Props = {
   initialData: InstallmentPlanData;
   totalAmount: number;
   today: string;
+  // Edición: el modal abre de inmediato y muestra la carga dentro del mismo contenedor
+  loading?: boolean;
+  loadError?: string;
 };
 
 export function InstallmentPlanModal({
@@ -84,6 +88,8 @@ export function InstallmentPlanModal({
   initialData,
   totalAmount,
   today,
+  loading = false,
+  loadError,
 }: Props) {
   const [data, setData] = useState<InstallmentPlanData>(() => ({
     ...initialData,
@@ -96,19 +102,13 @@ export function InstallmentPlanModal({
 
   useEffect(() => {
     if (!open) return;
-    const sc = document.querySelector<HTMLElement>("[data-scroll-container]");
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    if (sc) sc.style.overflowY = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-      if (sc) sc.style.overflowY = "";
-    };
-  }, [open, onClose]);
+    // Bloqueo compartido: al cerrar este modal no se desbloquea el fondo si el padre sigue abierto
+    return lockBodyScroll();
+  }, [open]);
+
+  // Foco, Tab confinado, Escape (solo este diálogo, el superior) y retorno de foco
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose });
 
   const paidAmount = parseMoney(data.rawPaidAmount);
   const installmentAmountValue = parseMoney(data.rawInstallmentAmount);
@@ -193,14 +193,19 @@ export function InstallmentPlanModal({
       />
       <div className="absolute inset-0 overflow-y-auto overscroll-contain p-4">
         <div className="flex min-h-full items-center justify-center">
-          <div className="relative my-4 w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            className="relative my-4 w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-5 outline-none shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
             {/* Header */}
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400">
                   Cuotas
                 </p>
-                <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                <h3 id={titleId} className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                   Plan de cuotas
                 </h3>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -213,12 +218,37 @@ export function InstallmentPlanModal({
               <button
                 type="button"
                 onClick={onClose}
+                aria-label="Cerrar"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 text-slate-400 transition hover:text-slate-900 dark:border-slate-700 dark:hover:text-slate-100"
               >
                 ✕
               </button>
             </div>
 
+            {loading || loadError ? (
+              <div className="mt-4 space-y-3" aria-busy={loading}>
+                {loadError ? (
+                  <p
+                    role="alert"
+                    className="rounded-2xl border border-rose-200/80 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
+                  >
+                    {loadError}
+                  </p>
+                ) : (
+                  <>
+                    <span role="status" className="sr-only">Cargando plan de cuotas</span>
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="space-y-1" aria-hidden="true">
+                        <div className="h-4 w-32 animate-pulse rounded-full bg-slate-200/60 dark:bg-slate-800/60" />
+                        <div className="h-10 w-full animate-pulse rounded-2xl bg-slate-200/60 dark:bg-slate-800/60" />
+                      </div>
+                    ))}
+                    <div aria-hidden="true" className="h-24 w-full animate-pulse rounded-2xl bg-slate-200/60 dark:bg-slate-800/60" />
+                    <div aria-hidden="true" className="h-11 w-full animate-pulse rounded-2xl bg-slate-200/60 dark:bg-slate-800/60" />
+                  </>
+                )}
+              </div>
+            ) : (
             <div className="mt-4 space-y-3">
               {/* Phone */}
               <div className="space-y-1">
@@ -411,6 +441,7 @@ export function InstallmentPlanModal({
                 </p>
               )}
             </div>
+            )}
           </div>
         </div>
       </div>

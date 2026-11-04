@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import { useFormStatus } from "react-dom";
 import { ButtonSpinner } from "@/components/button-spinner";
 import { formatCurrency } from "@/lib/currency-format";
@@ -35,7 +36,13 @@ type Props = {
   today: string;
   services: CompanyService[];
   company: QuotationCompanyInfo;
+  // Abrir al montar (shortcut "Nueva cotización" del dashboard → ?nueva=1)
+  autoOpen?: boolean;
 };
+
+const fieldLabelClass = "mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400";
+const motionClass =
+  "transition-[background-color,border-color,color,box-shadow,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none";
 
 function emptyRow(): ItemRow {
   return {
@@ -59,6 +66,12 @@ function buildPhoneHidden(digits: string): string {
 function parseMoney(v: string) {
   const n = Number(v.replace(/,/g, "").trim());
   return Number.isFinite(n) ? n : 0;
+}
+
+// Misma regla que el servidor: vacío → 1; cualquier otro valor se toma tal cual
+// (0 o inválido NO se convierte en 1: se marca como error).
+function parseQuantity(v: string) {
+  return v.trim() === "" ? 1 : parseMoney(v);
 }
 
 function roundMoney(v: number) {
@@ -89,14 +102,15 @@ function sanitizeNumeric(v: string, maxDecimals = 2): string {
   return result;
 }
 
-function SaveButton({ saved }: { saved: boolean }) {
+function SaveButton({ saved, invalid = false }: { saved: boolean; invalid?: boolean }) {
   const { pending } = useFormStatus();
 
   return (
     <button
       type="submit"
-      disabled={pending || saved}
-      className="inline-flex h-11 flex-1 items-center justify-center rounded-2xl border border-sky-600 bg-sky-600 px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(14,165,233,0.22)] transition-[background-color,border-color,box-shadow,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-sky-700 hover:bg-sky-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:border-cyan-500 dark:bg-cyan-500 dark:text-slate-950 dark:shadow-none dark:hover:bg-cyan-400"
+      disabled={pending || saved || invalid}
+      aria-busy={pending}
+      className="inline-flex h-12 flex-1 items-center justify-center rounded-2xl border border-sky-600 bg-sky-600 px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(14,165,233,0.22)] transition-[background-color,border-color,box-shadow,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-sky-700 hover:bg-sky-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 motion-reduce:transition-none dark:border-cyan-500 dark:bg-cyan-500 dark:text-slate-950 dark:shadow-none dark:hover:bg-cyan-400"
     >
       <span className="inline-flex items-center justify-center gap-2">
         {pending ? (
@@ -114,9 +128,32 @@ function SaveButton({ saved }: { saved: boolean }) {
   );
 }
 
-export function CreateQuotationForm({ today, services, company }: Props) {
+export function CreateQuotationForm({ today, services, company, autoOpen = false }: Props) {
   const [state, formAction] = useActionState(createQuotation, initialState);
   const [open, setOpen] = useState(false);
+  const [taxValue, setTaxValue] = useState("");
+  const descriptionRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const [focusRowIndex, setFocusRowIndex] = useState<number | null>(null);
+
+  // Shortcut del dashboard: abre directo y limpia ?nueva=1 (recargar no reabre)
+  useEffect(() => {
+    if (!autoOpen) return;
+    const timer = window.setTimeout(() => {
+      setOpen(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("nueva");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [autoOpen]);
+
+  // Al agregar una línea, el foco va a su descripción
+  useEffect(() => {
+    if (focusRowIndex === null) return;
+    descriptionRefs.current[focusRowIndex]?.focus();
+    const timer = window.setTimeout(() => setFocusRowIndex(null), 0);
+    return () => window.clearTimeout(timer);
+  }, [focusRowIndex]);
   const [formKey, setFormKey] = useState(0);
   const [pdfMessage, setPdfMessage] = useState("");
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -143,7 +180,6 @@ export function CreateQuotationForm({ today, services, company }: Props) {
     ? state.quotationNumber ?? "Cotización guardada"
     : "";
   const saved = Boolean(savedQuotationId);
-  const successPdfMessage = saved ? "Lista para descargar en PDF." : "";
   const actionMessage =
     state.timestamp === ignoredActionTimestamp ? "" : state.message;
 
@@ -151,7 +187,7 @@ export function CreateQuotationForm({ today, services, company }: Props) {
     () =>
       roundMoney(
         items.reduce((sum, row) => {
-          const qty = parseMoney(row.quantity) || 1;
+          const qty = parseQuantity(row.quantity);
           return sum + qty * parseMoney(row.unit_price);
         }, 0)
       ),
@@ -166,10 +202,16 @@ export function CreateQuotationForm({ today, services, company }: Props) {
     return roundMoney(Math.max(0, value));
   }, [discountType, discountValue, subtotal]);
 
+  const taxAmt = roundMoney(Math.max(0, parseMoney(taxValue)));
+  // Misma regla que el servidor: total = subtotal − descuento + impuesto (mínimo 0)
   const total = useMemo(
-    () => roundMoney(Math.max(0, subtotal - discountAmt)),
-    [subtotal, discountAmt]
+    () => roundMoney(Math.max(0, subtotal - discountAmt + taxAmt)),
+    [subtotal, discountAmt, taxAmt]
   );
+  // Aviso solo si el total real (con impuesto) quedaría negativo y el servidor lo lleva a 0
+  const totalWouldClamp = subtotal - discountAmt + taxAmt < 0;
+  const hasInvalidQuantity = items.some((row) => parseQuantity(row.quantity) <= 0);
+  const hasLineWithoutPrice = items.some((row) => row.description.trim() && parseMoney(row.unit_price) <= 0);
 
   function resetDraft() {
     setFormKey((current) => current + 1);
@@ -186,6 +228,7 @@ export function CreateQuotationForm({ today, services, company }: Props) {
     setItems([emptyRow()]);
     setDiscountType("$");
     setDiscountValue("");
+    setTaxValue("");
     setEmailError("");
   }
 
@@ -193,6 +236,16 @@ export function CreateQuotationForm({ today, services, company }: Props) {
     resetDraft();
     setOpen(false);
   }
+
+  // Foco, Tab confinado, Escape (igual que ✕) y retorno de foco al disparador
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose: closeAndReset });
+
+  // Bloqueo de scroll compartido (body + contenedor del dashboard), como los demás modales
+  useEffect(() => {
+    if (!open) return;
+    return lockBodyScroll();
+  }, [open]);
 
   function updateItem(index: number, updates: Partial<ItemRow>) {
     setItems((prev) =>
@@ -217,7 +270,8 @@ export function CreateQuotationForm({ today, services, company }: Props) {
 
   function addRow() {
     if (saved) return;
-    setItems((prev) => [...prev, emptyRow()]);
+    setFocusRowIndex(items.length);
+    setItems([...items, emptyRow()]);
   }
 
   function removeRow(index: number) {
@@ -389,7 +443,7 @@ export function CreateQuotationForm({ today, services, company }: Props) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       items.forEach((item, index) => {
-        const qty = parseMoney(item.quantity) || 1;
+        const qty = parseQuantity(item.quantity);
         const price = parseMoney(item.unit_price);
         const lineTotal = roundMoney(qty * price);
         const description = item.description || "Servicio";
@@ -415,10 +469,15 @@ export function CreateQuotationForm({ today, services, company }: Props) {
         y += rowHeight;
       });
 
-      y = ensurePage(y + 4, 42);
+      y = ensurePage(y + 4, 52);
       const summaryX = 118;
       const summaryW = 76;
-      const summaryH = discountAmt > 0 ? 38 : 30;
+      // Mismas líneas que la cotización guardada: subtotal, descuento, impuesto y total
+      const extraLines = [
+        ...(discountAmt > 0 ? [{ label: "Descuento", value: `-${formatCurrency(discountAmt)}`, rose: true }] : []),
+        ...(taxAmt > 0 ? [{ label: "Impuesto", value: `+${formatCurrency(taxAmt)}`, rose: false }] : []),
+      ];
+      const summaryH = 30 + extraLines.length * 9;
       drawCard(summaryX, y, summaryW, summaryH, [255, 255, 255]);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
@@ -426,15 +485,15 @@ export function CreateQuotationForm({ today, services, company }: Props) {
       doc.text("Subtotal", summaryX + 6, y + 10);
       textColor(slate950);
       doc.text(formatCurrency(subtotal), summaryX + summaryW - 6, y + 10, { align: "right" });
-      let totalY = y + 20;
-
-      if (discountAmt > 0) {
+      extraLines.forEach((line, index) => {
+        const lineY = y + 19 + index * 9;
         textColor(slate500);
-        doc.text("Descuento", summaryX + 6, y + 19);
-        doc.setTextColor(225, 29, 72);
-        doc.text(`-${formatCurrency(discountAmt)}`, summaryX + summaryW - 6, y + 19, { align: "right" });
-        totalY = y + 29;
-      }
+        doc.text(line.label, summaryX + 6, lineY);
+        if (line.rose) doc.setTextColor(225, 29, 72);
+        else textColor(slate950);
+        doc.text(line.value, summaryX + summaryW - 6, lineY, { align: "right" });
+      });
+      const totalY = y + 20 + extraLines.length * 9;
 
       doc.setDrawColor(slate200[0], slate200[1], slate200[2]);
       doc.line(summaryX + 6, totalY - 6, summaryX + summaryW - 6, totalY - 6);
@@ -494,21 +553,26 @@ export function CreateQuotationForm({ today, services, company }: Props) {
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-3 py-4 backdrop-blur-[2px] motion-reduce:backdrop-blur-none sm:px-6">
-          <div className="flex max-h-[90dvh] w-full max-w-[920px] flex-col overflow-hidden rounded-[28px] border border-white/70 bg-slate-100 shadow-[0_24px_80px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-950">
+        <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/50 backdrop-blur-[2px] motion-reduce:backdrop-blur-none sm:items-center sm:px-6 sm:py-4">
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            className="animate-mx-scale-in flex h-dvh w-full max-w-[920px] flex-col overflow-hidden bg-slate-100 outline-none shadow-[0_24px_80px_rgba(15,23,42,0.28)] sm:h-auto sm:max-h-[90dvh] sm:rounded-[28px] sm:border sm:border-white/70 dark:bg-slate-950 sm:dark:border-slate-800">
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-900 sm:px-6">
               <div>
                 <p className="text-xs font-medium uppercase tracking-[0.18em] text-sky-700 dark:text-cyan-300">
                   Nueva cotización
                 </p>
-                <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                  Preparar documento
+                <h2 id={titleId} className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                  {saved ? `Cotización ${savedQuotationNumber}` : "Preparar documento"}
                 </h2>
               </div>
               <button
                 type="button"
                 onClick={closeAndReset}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-[background-color,border-color,color,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900 dark:hover:text-white dark:focus-visible:outline-white"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-[background-color,border-color,color,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-900 dark:hover:text-white dark:focus-visible:outline-white"
                 aria-label="Cerrar"
               >
                 ×
@@ -518,61 +582,22 @@ export function CreateQuotationForm({ today, services, company }: Props) {
             <form key={formKey} action={formAction} className="flex min-h-0 flex-1 flex-col">
               <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6">
                 <div className="mx-auto max-w-[820px] rounded-[24px] border border-slate-200 bg-white shadow-[0_14px_44px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-900">
-                  <div className="border-b border-slate-200 px-4 py-5 dark:border-slate-800 sm:px-7">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                            Cotización
-                          </p>
-                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                            Borrador
-                          </span>
-                        </div>
-                        <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                          {savedQuotationNumber || "Número pendiente"}
-                        </p>
-                        <input type="hidden" name="issueDate" value={today} readOnly />
-                      </div>
-
-                      <div className="grid gap-2 text-sm sm:w-[260px]">
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/70">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Número</p>
-                          <input
-                            type="text"
-                            value={savedQuotationNumber || "Se asigna al guardar"}
-                            readOnly
-                            tabIndex={-1}
-                            className="mt-1 w-full cursor-default select-none bg-transparent text-sm font-semibold text-slate-900 outline-none dark:text-slate-100"
-                          />
-                        </div>
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/70">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Emitida</p>
-                          <input
-                            type="text"
-                            value={today}
-                            readOnly
-                            tabIndex={-1}
-                            className="mt-1 w-full cursor-default select-none bg-transparent text-sm font-semibold text-slate-900 outline-none dark:text-slate-100"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 grid gap-2 sm:grid-cols-3">
+                  <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800 sm:px-7 sm:py-5">
+                    <input type="hidden" name="issueDate" value={today} readOnly />
+                    <div className="grid gap-2 sm:grid-cols-3">
                       <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/70">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Vigencia</p>
-                        <input name="validUntil" type="date" value={validUntil} disabled={saved} onChange={(e) => setValidUntil(e.target.value)} className="mt-1 w-full bg-transparent text-sm font-medium text-slate-900 outline-none disabled:cursor-not-allowed disabled:text-slate-500 dark:text-slate-100 dark:[color-scheme:dark]" />
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/70">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Cliente</p>
-                        <p className="mt-1 truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {customerName.trim() || "Cliente general"}
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Número</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {savedQuotationNumber || "Se asigna al guardar"}
                         </p>
                       </div>
-                      <div className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 dark:border-cyan-500/20 dark:bg-cyan-500/10">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-sky-700/70 dark:text-cyan-300/80">Total</p>
-                        <p className="mt-1 text-lg font-semibold text-slate-950 dark:text-slate-50">{formatCurrency(total)}</p>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/70">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Emitida</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{today}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/70">
+                        <label htmlFor="quotation-valid-until" className="block text-[11px] uppercase tracking-[0.14em] text-slate-400">Válida hasta</label>
+                        <input id="quotation-valid-until" name="validUntil" type="date" min={today} value={validUntil} disabled={saved} onChange={(e) => setValidUntil(e.target.value)} className="mt-1 min-h-6 w-full bg-transparent text-sm font-medium text-slate-900 outline-none disabled:cursor-not-allowed disabled:text-slate-500 dark:text-slate-100 dark:[color-scheme:dark]" />
                       </div>
                     </div>
                   </div>
@@ -580,13 +605,21 @@ export function CreateQuotationForm({ today, services, company }: Props) {
                   <div className="space-y-6 px-4 py-5 sm:px-7">
                     <section>
                       <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                        Para
+                        Cliente
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <input name="customerName" type="text" maxLength={120} value={customerName} disabled={saved} onChange={(e) => setCustomerName(e.target.value)} className={inputClass} placeholder="Nombre del cliente" />
-                        <input name="customerCompany" type="text" maxLength={120} value={customerCompany} disabled={saved} onChange={(e) => setCustomerCompany(e.target.value)} className={inputClass} placeholder="Empresa opcional" />
                         <div>
+                          <label htmlFor="quotation-customer-name" className={fieldLabelClass}>Nombre</label>
+                          <input id="quotation-customer-name" name="customerName" type="text" autoComplete="off" maxLength={120} value={customerName} disabled={saved} onChange={(e) => setCustomerName(e.target.value)} className={inputClass} placeholder="Cliente general" />
+                        </div>
+                        <div>
+                          <label htmlFor="quotation-customer-company" className={fieldLabelClass}>Empresa (opcional)</label>
+                          <input id="quotation-customer-company" name="customerCompany" type="text" autoComplete="off" maxLength={120} value={customerCompany} disabled={saved} onChange={(e) => setCustomerCompany(e.target.value)} className={inputClass} placeholder="Nombre de la empresa" />
+                        </div>
+                        <div>
+                          <label htmlFor="quotation-customer-email" className={fieldLabelClass}>Correo (opcional)</label>
                           <input
+                            id="quotation-customer-email"
                             name="customerEmail"
                             type="email"
                             maxLength={120}
@@ -607,15 +640,17 @@ export function CreateQuotationForm({ today, services, company }: Props) {
                             placeholder="email@ejemplo.com"
                           />
                           {emailError ? (
-                            <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{emailError}</p>
+                            <p role="alert" className="mt-1 text-xs text-rose-600 dark:text-rose-400">{emailError}</p>
                           ) : null}
                         </div>
                         <div>
+                          <label htmlFor="quotation-customer-phone" className={fieldLabelClass}>Teléfono (opcional)</label>
                           <input type="hidden" name="customerPhone" value={buildPhoneHidden(customerPhoneDigits)} />
                           <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-white transition-[border-color,box-shadow,background-color] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] focus-within:border-sky-300 focus-within:ring-2 focus-within:ring-sky-100 dark:border-slate-700 dark:bg-slate-950/70 dark:focus-within:border-cyan-400 dark:focus-within:ring-cyan-500/10">
                             <span className="select-none pl-4 pr-2 text-sm text-slate-500 dark:text-slate-400">+507</span>
                             <div className="h-4 w-px shrink-0 bg-slate-200 dark:bg-slate-700" />
                             <input
+                              id="quotation-customer-phone"
                               type="tel"
                               inputMode="numeric"
                               value={customerPhoneDigits.length <= 4 ? customerPhoneDigits : `${customerPhoneDigits.slice(0, 4)}-${customerPhoneDigits.slice(4)}`}
@@ -633,56 +668,97 @@ export function CreateQuotationForm({ today, services, company }: Props) {
                     <section>
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                          Ítems
+                          Ítems · {items.length}
                         </p>
-                        <button
-                          type="button"
-                          onClick={addRow}
-                          disabled={saved}
-                          className="rounded-full px-2 py-1 text-xs font-semibold text-sky-600 transition-[background-color,color] duration-[180ms] hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:text-slate-400 dark:text-cyan-400 dark:hover:bg-cyan-500/10 dark:hover:text-cyan-300"
-                        >
-                          + Agregar línea
-                        </button>
                       </div>
 
                       <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
-                        <div className="hidden grid-cols-[minmax(0,1fr)_84px_116px_116px_42px] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 dark:border-slate-800 dark:bg-slate-950/70 sm:grid">
+                        <div className="hidden grid-cols-[minmax(0,1fr)_84px_116px_116px_44px] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 dark:border-slate-800 dark:bg-slate-950/70 sm:grid">
                           <span>Descripción</span>
                           <span className="text-center">Cant.</span>
                           <span className="text-right">P. unit.</span>
                           <span className="text-right">Total</span>
                           <span />
                         </div>
-                        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                           {items.map((row, i) => {
-                            const lineTotal = roundMoney((parseMoney(row.quantity) || 1) * parseMoney(row.unit_price));
+                            const lineTotal = roundMoney(parseQuantity(row.quantity) * parseMoney(row.unit_price));
+                            const rowLabel = `Ítem ${i + 1}`;
+                            const qtyInvalid = parseQuantity(row.quantity) <= 0;
+                            const qtyErrorId = `quotation-item-qty-error-${i}`;
 
                             return (
-                              <div key={i} className="bg-white p-3 dark:bg-slate-900">
+                              <li key={i} className="bg-white p-3 dark:bg-slate-900" aria-label={rowLabel}>
+                                <div className="mb-2 flex items-center justify-between gap-2 sm:hidden">
+                                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{rowLabel}</span>
+                                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(lineTotal)}</span>
+                                </div>
+
                                 {services.length > 0 ? (
-                                  <select
-                                    value={row.serviceId}
-                                    disabled={saved}
-                                    onChange={(e) => selectService(i, e.target.value)}
-                                    className={`${inputClass} mb-2`}
-                                  >
-                                    <option value="">Línea manual</option>
-                                    {services.map((service) => (
-                                      <option key={service.id} value={service.id}>
-                                        {service.name}{service.base_price != null ? ` (${formatCurrency(service.base_price)})` : ""}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  <div className="mb-2">
+                                    <label htmlFor={`quotation-item-service-${i}`} className="sr-only">Servicio del catálogo ({rowLabel})</label>
+                                    <select
+                                      id={`quotation-item-service-${i}`}
+                                      value={row.serviceId}
+                                      disabled={saved}
+                                      onChange={(e) => selectService(i, e.target.value)}
+                                      className={inputClass}
+                                    >
+                                      <option value="">Escribir manualmente</option>
+                                      {services.map((service) => (
+                                        <option key={service.id} value={service.id}>
+                                          {service.name}{service.base_price != null ? ` · ${formatCurrency(service.base_price)}` : ""}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
                                 ) : null}
 
                                 <input type="hidden" name="itemServiceId[]" value={row.serviceId} />
                                 <input type="hidden" name="itemServiceName[]" value={row.serviceNameSnapshot} />
 
-                                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_84px_116px_116px_42px] sm:items-center">
-                                  <input name="itemDescription[]" type="text" required value={row.description} disabled={saved} onChange={(e) => updateItem(i, { description: e.target.value })} placeholder="Descripción" className={inputClass} />
-                                  <input name="itemQuantity[]" type="text" inputMode="numeric" value={row.quantity} disabled={saved} onChange={(e) => updateItem(i, { quantity: sanitizeNumeric(e.target.value, 2) })} placeholder="1" className={`${inputClass} sm:text-center`} />
-                                  <input name="itemUnitPrice[]" type="text" inputMode="decimal" value={row.unit_price} disabled={saved} onChange={(e) => updateItem(i, { unit_price: sanitizeNumeric(e.target.value, 2) })} placeholder="$ 0.00" className={`${inputClass} sm:text-right`} />
-                                  <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-right text-sm font-semibold text-slate-900 dark:bg-slate-950/70 dark:text-slate-100">
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_84px_116px_116px_44px] sm:items-center">
+                                  <div className="col-span-2 sm:col-span-1">
+                                    <label htmlFor={`quotation-item-desc-${i}`} className={`${fieldLabelClass} sm:sr-only`}>Descripción</label>
+                                    <input
+                                      id={`quotation-item-desc-${i}`}
+                                      ref={(el) => { descriptionRefs.current[i] = el; }}
+                                      name="itemDescription[]"
+                                      type="text"
+                                      required
+                                      value={row.description}
+                                      disabled={saved}
+                                      onChange={(e) => updateItem(i, { description: e.target.value })}
+                                      placeholder="Qué vas a cotizar"
+                                      className={inputClass}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label htmlFor={`quotation-item-qty-${i}`} className={`${fieldLabelClass} sm:sr-only`}>Cantidad</label>
+                                    <input
+                                      id={`quotation-item-qty-${i}`}
+                                      name="itemQuantity[]"
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={row.quantity}
+                                      disabled={saved}
+                                      onChange={(e) => updateItem(i, { quantity: sanitizeNumeric(e.target.value, 2) })}
+                                      placeholder="1"
+                                      aria-invalid={qtyInvalid || undefined}
+                                      aria-describedby={qtyInvalid ? qtyErrorId : undefined}
+                                      className={`${qtyInvalid ? inputErrorClass : inputClass} sm:text-center`}
+                                    />
+                                    {qtyInvalid ? (
+                                      <p id={qtyErrorId} role="alert" className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                                        Debe ser mayor a 0.
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <div>
+                                    <label htmlFor={`quotation-item-price-${i}`} className={`${fieldLabelClass} sm:sr-only`}>Precio unitario ($)</label>
+                                    <input id={`quotation-item-price-${i}`} name="itemUnitPrice[]" type="text" inputMode="decimal" value={row.unit_price} disabled={saved} onChange={(e) => updateItem(i, { unit_price: sanitizeNumeric(e.target.value, 2) })} placeholder="0.00" className={`${inputClass} sm:text-right`} />
+                                  </div>
+                                  <div className="hidden rounded-xl bg-slate-50 px-3 py-2.5 text-right text-sm font-semibold text-slate-900 dark:bg-slate-950/70 dark:text-slate-100 sm:block" aria-label={`Total ${rowLabel}`}>
                                     {formatCurrency(lineTotal)}
                                   </div>
                                   {items.length > 1 ? (
@@ -690,26 +766,46 @@ export function CreateQuotationForm({ today, services, company }: Props) {
                                       type="button"
                                       onClick={() => removeRow(i)}
                                       disabled={saved}
-                                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-500 transition-[background-color,border-color,color,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-rose-300 hover:bg-rose-100 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
-                                      aria-label="Eliminar ítem"
+                                      className={`col-span-2 flex h-11 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-sm font-medium text-rose-600 ${motionClass} hover:border-rose-300 hover:bg-rose-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 sm:col-span-1 sm:h-11 sm:w-11 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300`}
+                                      aria-label={`Eliminar ${rowLabel}`}
                                     >
-                                      ×
+                                      <span aria-hidden="true">×</span>
+                                      <span className="sm:hidden">Quitar línea</span>
                                     </button>
                                   ) : (
-                                    <div className="hidden h-10 w-10 sm:block" />
+                                    <div className="hidden h-11 w-11 sm:block" />
                                   )}
                                 </div>
-                              </div>
+                              </li>
                             );
                           })}
-                        </div>
+                        </ul>
+                        <button
+                          type="button"
+                          onClick={addRow}
+                          disabled={saved}
+                          className={`flex h-12 w-full items-center justify-center gap-2 border-t border-dashed border-slate-200 bg-slate-50/70 text-sm font-semibold text-sky-700 ${motionClass} hover:bg-sky-50 active:bg-sky-100 disabled:cursor-not-allowed disabled:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300 dark:border-slate-700 dark:bg-slate-950/40 dark:text-cyan-300 dark:hover:bg-cyan-500/10`}
+                        >
+                          <span aria-hidden="true">+</span> Agregar línea
+                        </button>
                       </div>
+                      {hasLineWithoutPrice ? (
+                        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                          Hay líneas sin precio: se guardarán en $ 0.00.
+                        </p>
+                      ) : null}
                     </section>
 
                     <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                       <div className="space-y-3">
-                        <textarea name="notes" rows={3} value={notes} disabled={saved} onChange={(e) => setNotes(e.target.value)} className={`${inputClass} min-h-20 resize-none`} placeholder="Notas para el cliente" />
-                        <textarea name="terms" rows={3} value={terms} disabled={saved} onChange={(e) => setTerms(e.target.value)} className={`${inputClass} min-h-20 resize-none`} placeholder="Términos de la cotización" />
+                        <div>
+                          <label htmlFor="quotation-notes" className={fieldLabelClass}>Notas para el cliente (opcional)</label>
+                          <textarea id="quotation-notes" name="notes" rows={3} value={notes} disabled={saved} onChange={(e) => setNotes(e.target.value)} className={`${inputClass} min-h-20 resize-none`} placeholder="Ej.: incluye instalación" />
+                        </div>
+                        <div>
+                          <label htmlFor="quotation-terms" className={fieldLabelClass}>Términos (opcional)</label>
+                          <textarea id="quotation-terms" name="terms" rows={3} value={terms} disabled={saved} onChange={(e) => setTerms(e.target.value)} className={`${inputClass} min-h-20 resize-none`} placeholder="Ej.: 50% de adelanto" />
+                        </div>
                       </div>
 
                       <div className="self-start rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/70">
@@ -722,13 +818,14 @@ export function CreateQuotationForm({ today, services, company }: Props) {
                             <span className="font-medium text-slate-900 dark:text-slate-100">{formatCurrency(subtotal)}</span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
-                            <label className="text-sm text-slate-500 dark:text-slate-400">Descuento</label>
+                            <label htmlFor="quotation-discount" className="text-sm text-slate-500 dark:text-slate-400">Descuento</label>
                             <div className="flex items-center gap-1.5">
-                              <div className="flex overflow-hidden rounded-lg border border-slate-200 text-xs dark:border-slate-700">
-                                <button type="button" disabled={saved} onClick={() => { setDiscountType("$"); setDiscountValue(""); }} className={`px-2.5 py-1.5 font-semibold transition-colors duration-[180ms] ${discountType === "$" ? "bg-sky-500 text-white dark:bg-cyan-500 dark:text-slate-950" : "text-slate-500 hover:text-slate-700 disabled:text-slate-400 dark:text-slate-400 dark:hover:text-slate-200"}`}>$</button>
-                                <button type="button" disabled={saved} onClick={() => { setDiscountType("%"); setDiscountValue(""); }} className={`px-2.5 py-1.5 font-semibold transition-colors duration-[180ms] ${discountType === "%" ? "bg-sky-500 text-white dark:bg-cyan-500 dark:text-slate-950" : "text-slate-500 hover:text-slate-700 disabled:text-slate-400 dark:text-slate-400 dark:hover:text-slate-200"}`}>%</button>
+                              <div role="group" aria-label="Tipo de descuento" className="flex overflow-hidden rounded-lg border border-slate-200 text-xs dark:border-slate-700">
+                                <button type="button" aria-pressed={discountType === "$"} disabled={saved} onClick={() => { setDiscountType("$"); setDiscountValue(""); }} className={`min-h-9 min-w-9 px-2.5 font-semibold ${motionClass} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300 ${discountType === "$" ? "bg-sky-500 text-white dark:bg-cyan-500 dark:text-slate-950" : "text-slate-500 hover:text-slate-700 disabled:text-slate-400 dark:text-slate-400 dark:hover:text-slate-200"}`}>$</button>
+                                <button type="button" aria-pressed={discountType === "%"} disabled={saved} onClick={() => { setDiscountType("%"); setDiscountValue(""); }} className={`min-h-9 min-w-9 px-2.5 font-semibold ${motionClass} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300 ${discountType === "%" ? "bg-sky-500 text-white dark:bg-cyan-500 dark:text-slate-950" : "text-slate-500 hover:text-slate-700 disabled:text-slate-400 dark:text-slate-400 dark:hover:text-slate-200"}`}>%</button>
                               </div>
                               <input
+                                id="quotation-discount"
                                 type="text"
                                 inputMode="decimal"
                                 value={discountValue}
@@ -738,17 +835,40 @@ export function CreateQuotationForm({ today, services, company }: Props) {
                                   setDiscountValue(discountType === "%" && parseMoney(value) > 100 ? "100" : value);
                                 }}
                                 placeholder="0"
-                                className="w-20 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-right text-sm text-slate-900 outline-none placeholder:text-slate-400 transition-[border-color,box-shadow,background-color] duration-[180ms] focus-visible:border-sky-300 focus-visible:ring-2 focus-visible:ring-sky-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus-visible:border-cyan-400"
+                                className="h-9 w-24 rounded-xl border border-slate-200 bg-white px-3 text-right text-sm text-slate-900 outline-none placeholder:text-slate-400 transition-[border-color,box-shadow,background-color] duration-[180ms] focus-visible:border-sky-300 focus-visible:ring-2 focus-visible:ring-sky-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus-visible:border-cyan-400"
                               />
                               <input type="hidden" name="discountAmount" value={String(discountAmt)} />
-                              <input type="hidden" name="taxAmount" value="0" />
                             </div>
                           </div>
                           {discountAmt > 0 ? (
                             <p className="text-right text-xs text-rose-500 dark:text-rose-400">
-                              -{formatCurrency(discountAmt)}
+                              −{formatCurrency(discountAmt)}
                               {discountType === "%" ? ` (${discountValue}%)` : ""}
                             </p>
+                          ) : null}
+                          {totalWouldClamp ? (
+                            <p role="alert" className="text-right text-xs text-amber-700 dark:text-amber-300">
+                              El descuento supera el subtotal más el impuesto; el total quedará en $ 0.00.
+                            </p>
+                          ) : null}
+                          <div className="flex items-center justify-between gap-3">
+                            <label htmlFor="quotation-tax" className="text-sm text-slate-500 dark:text-slate-400">
+                              Impuesto ($)
+                            </label>
+                            <input
+                              id="quotation-tax"
+                              type="text"
+                              inputMode="decimal"
+                              value={taxValue}
+                              disabled={saved}
+                              onChange={(e) => setTaxValue(sanitizeNumeric(e.target.value, 2))}
+                              placeholder="0.00"
+                              className="h-9 w-24 rounded-xl border border-slate-200 bg-white px-3 text-right text-sm text-slate-900 outline-none placeholder:text-slate-400 transition-[border-color,box-shadow,background-color] duration-[180ms] focus-visible:border-sky-300 focus-visible:ring-2 focus-visible:ring-sky-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus-visible:border-cyan-400"
+                            />
+                            <input type="hidden" name="taxAmount" value={String(taxAmt)} />
+                          </div>
+                          {taxAmt > 0 ? (
+                            <p className="text-right text-xs text-slate-500 dark:text-slate-400">+{formatCurrency(taxAmt)}</p>
                           ) : null}
                           <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-3 dark:border-slate-700">
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Total</span>
@@ -761,32 +881,68 @@ export function CreateQuotationForm({ today, services, company }: Props) {
                 </div>
               </div>
 
-              <div className="shrink-0 border-t border-slate-200 bg-white/95 p-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 sm:p-4">
+              <div className="shrink-0 border-t border-slate-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 sm:p-4">
                 <div className="mx-auto max-w-[820px] rounded-[22px] border border-slate-200 bg-white p-3 shadow-[0_10px_34px_rgba(15,23,42,0.10)] dark:border-slate-800 dark:bg-slate-950 sm:p-4">
-                  {(!state.success && actionMessage) || pdfMessage || successPdfMessage ? (
-                    <p className={`mb-3 rounded-2xl px-4 py-3 text-sm ${state.success || saved ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"}`}>
-                      {pdfMessage || successPdfMessage || actionMessage}
+                  <div className="mb-3 flex items-baseline justify-between gap-3">
+                    <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Total a cotizar</span>
+                    <span className="text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">{formatCurrency(total)}</span>
+                  </div>
+
+                  {saved ? (
+                    <div role="status" className="mb-3 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200">
+                      <p className="font-semibold">Cotización {savedQuotationNumber} guardada ✓</p>
+                      <p className="mt-0.5 text-emerald-700 dark:text-emerald-300">Ya aparece en tu lista. Descárgala en PDF o crea otra.</p>
+                    </div>
+                  ) : !state.success && actionMessage ? (
+                    <p role="alert" className="mb-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+                      {actionMessage}
+                    </p>
+                  ) : null}
+                  {pdfMessage ? (
+                    <p role="alert" className="mb-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+                      {pdfMessage}
                     </p>
                   ) : null}
 
-                  <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                    <SaveButton saved={saved} />
-                    <button
-                      type="button"
-                      onClick={downloadPdf}
-                      disabled={pdfBusy}
-                      className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-[background-color,border-color,color,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-900 dark:hover:text-white dark:focus-visible:outline-white"
-                    >
-                      {pdfBusy ? "Generando PDF..." : "Descargar cotización en PDF"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={closeAndReset}
-                      className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-600 transition-[background-color,border-color,color,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-300 hover:bg-white hover:text-slate-950 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-900 dark:hover:text-white dark:focus-visible:outline-white"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
+                  {saved ? (
+                    <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                      <button
+                        type="button"
+                        onClick={downloadPdf}
+                        disabled={pdfBusy}
+                        aria-busy={pdfBusy}
+                        className={`inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-sky-600 bg-sky-600 px-4 text-sm font-semibold text-white ${motionClass} hover:bg-sky-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:border-cyan-500 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400`}
+                      >
+                        {pdfBusy ? <ButtonSpinner variant="current" /> : null}
+                        {pdfBusy ? "Generando PDF..." : "Descargar PDF"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetDraft}
+                        className={`inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 ${motionClass} hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900 dark:focus-visible:outline-white`}
+                      >
+                        Crear otra
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closeAndReset}
+                        className={`inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-600 ${motionClass} hover:border-slate-300 hover:bg-white hover:text-slate-950 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-900 dark:focus-visible:outline-white`}
+                      >
+                        Cerrar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                      <SaveButton saved={saved} invalid={hasInvalidQuantity} />
+                      <button
+                        type="button"
+                        onClick={closeAndReset}
+                        className={`inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-600 ${motionClass} hover:border-slate-300 hover:bg-white hover:text-slate-950 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-900 dark:focus-visible:outline-white`}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </form>

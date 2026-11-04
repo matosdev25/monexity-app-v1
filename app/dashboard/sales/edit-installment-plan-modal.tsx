@@ -13,6 +13,7 @@ import {
   type EditableInstallmentPlan,
 } from "./actions";
 import type { Sale } from "./types";
+import { ButtonSpinner } from "@/components/button-spinner";
 
 function toInitialPlanData(plan: EditableInstallmentPlan): InstallmentPlanData {
   return {
@@ -32,21 +33,33 @@ export function EditInstallmentPlanModal({ sale }: { sale: Sale }) {
   const [plan, setPlan] = useState<EditableInstallmentPlan | null>(null);
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
+  // Cambia en cada carga exitosa para montar el formulario con los datos frescos
+  const [planVersion, setPlanVersion] = useState(0);
   const [isLoading, startLoading] = useTransition();
   const [isSaving, startSaving] = useTransition();
 
   function handleOpen() {
+    if (isLoading || isSaving) return;
     setMessage("");
+    setLoadError("");
+    setPlan(null);
+    setOpen(true);
     startLoading(async () => {
-      const currentPlan = await fetchEditableInstallmentPlan(sale.id);
+      let currentPlan: EditableInstallmentPlan | null = null;
+      try {
+        currentPlan = await fetchEditableInstallmentPlan(sale.id);
+      } catch {
+        currentPlan = null;
+      }
 
       if (!currentPlan) {
-        setMessage("No se pudo cargar el plan de cuotas.");
+        setLoadError("No se pudo cargar el plan de cuotas.");
         return;
       }
 
       setPlan(currentPlan);
-      setOpen(true);
+      setPlanVersion((v) => v + 1);
     });
   }
 
@@ -87,9 +100,11 @@ export function EditInstallmentPlanModal({ sale }: { sale: Sale }) {
           type="button"
           onClick={handleOpen}
           disabled={isLoading || isSaving}
-          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-amber-300 hover:bg-amber-100 hover:text-amber-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15 dark:hover:text-amber-200"
+          aria-busy={isSaving}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-amber-300 hover:bg-amber-100 hover:text-amber-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15 dark:hover:text-amber-200"
         >
-          {isLoading ? "Cargando..." : isSaving ? "Guardando..." : "Editar cuotas"}
+          {isSaving ? <ButtonSpinner variant="current" /> : null}
+          {isSaving ? "Guardando..." : "Editar cuotas"}
         </button>
 
         {message ? (
@@ -100,6 +115,9 @@ export function EditInstallmentPlanModal({ sale }: { sale: Sale }) {
       </div>
 
       <InstallmentPlanModal
+        key={plan ? `plan-${planVersion}` : "loading"}
+        loading={!plan && !loadError}
+        loadError={loadError || undefined}
         open={open}
         onClose={() => setOpen(false)}
         onConfirm={handleConfirm}

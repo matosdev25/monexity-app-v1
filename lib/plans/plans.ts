@@ -78,3 +78,6 @@ export const PLANS: Plan[] = [
 export const PLAN_MAP: Record<string, Plan> = Object.fromEntries(
   PLANS.map((p) => [p.id, p])
 );
+
+// Las reglas de cobro viven en lib/billing/plans; se reexportan por compatibilidad.
+export { getNextBillingPeriod, getPlanAmount, PLAN_LEVELS } from "../billing/plans";

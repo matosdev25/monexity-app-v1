@@ -15,7 +15,8 @@ const PUBLIC_ROUTES = [
   "/auth/error",
 ];
 
-export async function middleware(request: NextRequest) {
+// Next.js 16: convención Proxy (antes middleware.ts). Corre en Node.js; no admite `runtime`.
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);
@@ -87,7 +88,11 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (isPublicRoute && !pathname.startsWith("/auth/update-password")) {
+    // Las páginas legales son públicas también para usuarios autenticados: deben poder
+    // leerse aunque tengan pendiente la aceptación (el guard vive solo en /dashboard).
+    const isLegalRoute = pathname === "/legal" || pathname.startsWith("/legal/");
+
+    if (isPublicRoute && !isLegalRoute && !pathname.startsWith("/auth/update-password")) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
       return NextResponse.redirect(url);

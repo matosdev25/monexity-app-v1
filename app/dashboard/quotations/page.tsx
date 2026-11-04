@@ -60,7 +60,7 @@ function isExpired(validUntil: string | null, status: string) {
 }
 
 type QuotationsPageProps = {
-  searchParams?: Promise<{ status?: string }>;
+  searchParams?: Promise<{ status?: string; nueva?: string }>;
 };
 
 const shellClass = "min-h-full px-2 py-2 text-app sm:px-3 sm:py-3";
@@ -94,6 +94,8 @@ const QuotationsHistoryModal = dynamic(
 export default async function QuotationsPage({ searchParams }: QuotationsPageProps) {
   const params = (await searchParams) ?? {};
   const statusParam = params.status ?? "all";
+  // Shortcut "Nueva cotización" del dashboard
+  const autoOpenCreate = params.nueva === "1";
   const today = getTodayInPanama();
 
   const supabase = await createClient();
@@ -193,15 +195,18 @@ export default async function QuotationsPage({ searchParams }: QuotationsPagePro
               <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-300">
                 Genera propuestas para tus clientes y conviértelas a ventas con un clic cuando sean aceptadas.
               </p>
-              <div className="mt-4 sm:hidden">
-                <CreateQuotationForm today={today} services={services} company={companyInfo} />
+              {/* Una sola instancia (antes había dos, una por breakpoint) */}
+              <div className="mt-4">
+                <CreateQuotationForm
+                  today={today}
+                  services={services}
+                  company={companyInfo}
+                  autoOpen={autoOpenCreate}
+                />
               </div>
             </div>
 
             <div className="grid gap-3">
-              <div className="hidden justify-end sm:flex">
-                <CreateQuotationForm today={today} services={services} company={companyInfo} />
-              </div>
               <div className="grid min-w-[220px] gap-3 sm:grid-cols-3">
                 <div className={statCardClass}>
                   <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
@@ -335,6 +340,7 @@ export default async function QuotationsPage({ searchParams }: QuotationsPagePro
                               <input type="hidden" name="quotationId" value={q.id} />
                               <ConfirmSubmitButton
                                 label="Eliminar"
+                                pendingLabel="Eliminando..."
                                 title="Eliminar cotización"
                                 confirmMessage={`Se eliminará la cotización ${q.quotation_number ?? ""}.`}
                                 confirmLabel="Sí, eliminar"

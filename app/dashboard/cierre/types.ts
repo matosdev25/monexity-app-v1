@@ -34,7 +34,8 @@ export type ClosureSnapshot = {
 export type PeriodClosure = {
   id: string;
   company_id: string;
-  created_by: string;
+  // null si el autor eliminó su cuenta (FK ON DELETE SET NULL)
+  created_by: string | null;
   period_months: 3 | 6 | 12;
   period_start: string;
   period_end: string;
@@ -76,7 +77,8 @@ export type ClosureExport = {
   export_type: string;
   file_url: string | null;
   file_size_bytes: number | null;
-  generated_by: string;
+  // null si el autor eliminó su cuenta (FK ON DELETE SET NULL)
+  generated_by: string | null;
   generated_at: string;
 };
 

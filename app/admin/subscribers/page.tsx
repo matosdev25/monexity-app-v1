@@ -1,8 +1,18 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireGlobalAdmin } from "@/lib/admin-auth";
 import { formatShortDate } from "@/lib/date-format";
+import {
+  ADMIN_PAGE_SIZE,
+  AdminEmptyState,
+  AdminErrorState,
+  AdminPagination,
+  adminInputClass,
+  adminPrimaryButtonClass,
+  parsePage,
+  sanitizeSearch,
+} from "../admin-ui";
 
-export const metadata = { title: "Admin — Suscriptores" };
+export const metadata = { title: "Admin — Empresas" };
 export const dynamic = "force-dynamic";
 
 const PLAN_LABELS: Record<string, string> = {
@@ -24,25 +34,20 @@ const STATUS_LABELS: Record<string, string> = {
   inactive: "Inactiva",
 };
 
-const inputClass =
-  "rounded-[18px] border border-app bg-app-soft px-4 py-3 text-sm text-app outline-none transition-[background-color,border-color,box-shadow] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] placeholder:text-app-soft focus:border-app-strong focus:bg-white focus-visible:ring-2 focus-visible:ring-sky-400/30 dark:focus:bg-white/[0.08]";
+const STATUS_FILTERS = ["trialing", "active", "pending", "pending_payment_method", "failed", "cancelled", "expired", "past_due", "inactive"];
 
 type CompanyRow = {
   id: string;
   name: string | null;
   subscription_status: string | null;
   subscription_plan: string | null;
+  subscription_billing_cycle: string | null;
   trial_ends_at: string | null;
   current_period_starts_at: string | null;
   current_period_ends_at: string | null;
   created_at: string | null;
   owner_user_id: string | null;
-};
-
-type MembershipRow = {
-  company_id: string;
-  user_id: string;
-  role: string | null;
+  is_blocked: boolean | null;
 };
 
 type ProfileRow = {
@@ -51,146 +56,160 @@ type ProfileRow = {
   full_name: string | null;
 };
 
-type PaymentIntentRow = {
-  company_id: string;
-  billing_cycle: string | null;
-  status: string | null;
-  created_at: string | null;
-};
-
-function formatDate(value: string | null) {
-  return formatShortDate(value);
+function cycleLabel(value: string | null) {
+  if (value === "annual") return "Anual";
+  if (value === "monthly") return "Mensual";
+  return "—";
 }
 
 export default async function AdminSubscribersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
   await requireGlobalAdmin();
 
-  const { q = "", status = "" } = await searchParams;
-  const query = q.trim().toLowerCase();
+  const { q = "", status: rawStatus = "", page: rawPage } = await searchParams;
+  const search = sanitizeSearch(q);
+  const status = STATUS_FILTERS.includes(rawStatus) ? rawStatus : "";
+  const page = parsePage(rawPage);
+  const from = (page - 1) * ADMIN_PAGE_SIZE;
   const admin = createAdminClient();
 
-  const [{ data: companiesRaw }, { data: membershipsRaw }, { data: paymentsRaw }] = await Promise.all([
-    admin
-      .from("companies")
-      .select("id, name, subscription_status, subscription_plan, trial_ends_at, current_period_starts_at, current_period_ends_at, created_at, owner_user_id")
-      .order("created_at", { ascending: false }),
-    admin
-      .from("memberships")
-      .select("company_id, user_id, role")
-      .eq("role", "owner"),
-    admin
-      .from("payment_intents")
-      .select("company_id, billing_cycle, status, created_at")
-      .order("created_at", { ascending: false }),
-  ]);
+  let loadError = false;
 
-  const companies = (companiesRaw ?? []) as CompanyRow[];
-  const memberships = (membershipsRaw ?? []) as MembershipRow[];
-  const payments = (paymentsRaw ?? []) as PaymentIntentRow[];
-  const ownerIds = [...new Set(memberships.map((m) => m.user_id))];
-
-  const { data: profilesRaw } = ownerIds.length > 0
-    ? await admin.from("profiles").select("id, email, full_name").in("id", ownerIds)
-    : { data: [] };
-
-  const profiles = new Map((profilesRaw ?? []).map((p) => [p.id, p as ProfileRow]));
-  const owners = new Map(memberships.map((m) => [m.company_id, profiles.get(m.user_id) ?? null]));
-  const latestPayment = new Map<string, PaymentIntentRow>();
-  for (const payment of payments) {
-    if (!latestPayment.has(payment.company_id)) latestPayment.set(payment.company_id, payment);
+  // Búsqueda por email del dueño: ids de perfiles coincidentes (acotado)
+  let ownerIdsBySearch: string[] = [];
+  if (search) {
+    const { data: matches, error } = await admin
+      .from("profiles")
+      .select("id")
+      .ilike("email", `%${search}%`)
+      .limit(100);
+    if (error) loadError = true;
+    ownerIdsBySearch = (matches ?? []).map((profile) => profile.id as string);
   }
 
-  const rows = companies.filter((company) => {
-    const owner = owners.get(company.id);
-    const matchesQuery = !query
-      || String(company.name ?? "").toLowerCase().includes(query)
-      || String(owner?.email ?? "").toLowerCase().includes(query);
-    const matchesStatus = !status || company.subscription_status === status;
-    return matchesQuery && matchesStatus;
-  });
+  let query = admin
+    .from("companies")
+    .select(
+      "id, name, subscription_status, subscription_plan, subscription_billing_cycle, trial_ends_at, current_period_starts_at, current_period_ends_at, created_at, owner_user_id, is_blocked",
+      { count: "exact" }
+    )
+    .order("created_at", { ascending: false })
+    .range(from, from + ADMIN_PAGE_SIZE - 1);
+
+  if (status) {
+    query = status === "cancelled"
+      ? query.in("subscription_status", ["cancelled", "canceled"])
+      : query.eq("subscription_status", status);
+  }
+  if (search) {
+    const ownerFilter = ownerIdsBySearch.length > 0 ? `,owner_user_id.in.(${ownerIdsBySearch.join(",")})` : "";
+    query = query.or(`name.ilike.%${search}%${ownerFilter}`);
+  }
+
+  const { data: companiesRaw, count, error: companiesError } = await query;
+  if (companiesError) loadError = true;
+
+  const companies = (companiesRaw ?? []) as CompanyRow[];
+  const ownerIds = [...new Set(companies.map((company) => company.owner_user_id).filter(Boolean))] as string[];
+
+  const { data: profilesRaw, error: profilesError } = ownerIds.length > 0
+    ? await admin.from("profiles").select("id, email, full_name").in("id", ownerIds)
+    : { data: [] as ProfileRow[], error: null };
+  if (profilesError) loadError = true;
+
+  const owners = new Map(((profilesRaw ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]));
+  const total = count ?? 0;
 
   return (
     <div className="space-y-5">
-      <form className="app-card grid gap-2 rounded-[24px] p-4 sm:grid-cols-[1fr_180px_auto]">
+      <form className="app-card grid gap-2 rounded-[24px] p-4 sm:grid-cols-[1fr_200px_auto]">
+        <label className="sr-only" htmlFor="admin-company-search">Buscar empresas</label>
         <input
+          id="admin-company-search"
           name="q"
+          type="search"
           defaultValue={q}
-          placeholder="Buscar por negocio o email"
-          className={inputClass}
+          placeholder="Buscar por negocio o email del dueño"
+          className={adminInputClass}
         />
-        <select
-          name="status"
-          defaultValue={status}
-          className={inputClass}
-        >
-          <option value="">Todos</option>
-          <option value="trialing">Prueba</option>
-          <option value="active">Activa</option>
-          <option value="pending">Pendiente</option>
-          <option value="pending_payment_method">Pago pendiente</option>
-          <option value="failed">Fallida</option>
-          <option value="cancelled">Cancelada</option>
-          <option value="expired">Expirada</option>
+        <label className="sr-only" htmlFor="admin-company-status">Estado</label>
+        <select id="admin-company-status" name="status" defaultValue={status} className={adminInputClass}>
+          <option value="">Todos los estados</option>
+          {STATUS_FILTERS.map((value) => (
+            <option key={value} value={value}>{STATUS_LABELS[value]}</option>
+          ))}
         </select>
-        <button
-          type="submit"
-          className="rounded-[18px] bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-slate-800 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
-        >
+        <button type="submit" className={adminPrimaryButtonClass}>
           Filtrar
         </button>
       </form>
 
-      <div className="app-card overflow-hidden rounded-[28px]">
+      {loadError ? (
+        <AdminErrorState message="Revisa la conexión con Supabase y recarga la página." />
+      ) : null}
+
+      <section className="app-card overflow-hidden rounded-[28px]">
         <div className="border-b border-app px-4 py-3 text-sm font-semibold text-app">
-          {rows.length} suscriptor(es)
+          {total} empresa(s)
         </div>
 
-        <div className="divide-y divide-[var(--border-soft)]">
-          {rows.map((company) => {
-            const owner = owners.get(company.id);
-            const payment = latestPayment.get(company.id);
-            return (
-              <div key={company.id} className="grid gap-3 px-4 py-4 lg:grid-cols-[1.3fr_1fr_1fr_1fr]">
-                <div>
-                  <p className="font-semibold text-app">{company.name ?? "Sin nombre"}</p>
-                  <p className="mt-1 text-xs text-app-muted">
-                    {owner?.email ?? "Dueño sin email"}
-                  </p>
-                  {owner?.full_name && (
-                    <p className="mt-0.5 text-xs text-app-soft">{owner.full_name}</p>
-                  )}
-                </div>
+        {companies.length === 0 && !loadError ? (
+          <div className="p-4">
+            <AdminEmptyState
+              title="No hay empresas con estos filtros"
+              description={search || status ? "Prueba con otra búsqueda o estado." : undefined}
+            />
+          </div>
+        ) : (
+          <div className="divide-y divide-[var(--border-soft)]">
+            {companies.map((company) => {
+              const owner = company.owner_user_id ? owners.get(company.owner_user_id) : null;
+              return (
+                <div key={company.id} className="grid min-w-0 gap-3 px-4 py-4 lg:grid-cols-[1.3fr_1fr_1fr_1fr]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="break-words font-semibold text-app">{company.name ?? "Sin nombre"}</p>
+                      {company.is_blocked ? (
+                        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+                          Bloqueada
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 break-all text-xs text-app-muted">{owner?.email ?? "Dueño sin email"}</p>
+                    {owner?.full_name ? <p className="mt-0.5 text-xs text-app-soft">{owner.full_name}</p> : null}
+                  </div>
 
-                <div className="text-sm">
-                  <p className="text-app-muted">Plan</p>
-                  <p className="font-medium text-app">
-                    {PLAN_LABELS[company.subscription_plan ?? ""] ?? "Sin plan"} ·{" "}
-                    {payment?.billing_cycle === "annual" ? "Anual" : payment?.billing_cycle === "monthly" ? "Mensual" : "—"}
-                  </p>
-                </div>
+                  <div className="text-sm">
+                    <p className="text-app-muted">Plan</p>
+                    <p className="font-medium text-app">
+                      {PLAN_LABELS[company.subscription_plan ?? ""] ?? "Sin plan"} · {cycleLabel(company.subscription_billing_cycle)}
+                    </p>
+                  </div>
 
-                <div className="text-sm">
-                  <p className="text-app-muted">Estado</p>
-                  <p className="font-medium text-app">
-                    {STATUS_LABELS[company.subscription_status ?? ""] ?? company.subscription_status ?? "Sin estado"}
-                  </p>
-                </div>
+                  <div className="text-sm">
+                    <p className="text-app-muted">Estado</p>
+                    <p className="font-medium text-app">
+                      {STATUS_LABELS[company.subscription_status ?? ""] ?? company.subscription_status ?? "Sin estado"}
+                    </p>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs text-app-muted sm:grid-cols-4 lg:grid-cols-2">
-                  <p>Inicio<br /><span className="font-medium text-app">{formatDate(company.current_period_starts_at)}</span></p>
-                  <p>Trial<br /><span className="font-medium text-app">{formatDate(company.trial_ends_at)}</span></p>
-                  <p>Renueva<br /><span className="font-medium text-app">{formatDate(company.current_period_ends_at)}</span></p>
-                  <p>Creada<br /><span className="font-medium text-app">{formatDate(company.created_at)}</span></p>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-app-muted sm:grid-cols-4 lg:grid-cols-2">
+                    <p>Inicio<br /><span className="font-medium text-app">{formatShortDate(company.current_period_starts_at)}</span></p>
+                    <p>Trial<br /><span className="font-medium text-app">{formatShortDate(company.trial_ends_at)}</span></p>
+                    <p>Renueva<br /><span className="font-medium text-app">{formatShortDate(company.current_period_ends_at)}</span></p>
+                    <p>Creada<br /><span className="font-medium text-app">{formatShortDate(company.created_at)}</span></p>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <AdminPagination basePath="/admin/subscribers" params={{ q: search, status }} page={page} total={total} />
     </div>
   );
 }

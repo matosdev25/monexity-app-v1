@@ -1,7 +1,5 @@
 import "server-only";
 
-type BillingCycle = "monthly" | "annual";
-
 type PagueloFacilTransaction = {
   codOper?: string;
   status?: number | string;
@@ -11,7 +9,10 @@ type PagueloFacilTransaction = {
   requestPayAmount?: number | string;
   totalPay?: number | string;
   customFields?: unknown;
+  urlString?: string | null;
 };
+
+const RETURN_PATH = "/api/payments/paguelofacil/return";
 
 const LIVE_API_BASE = "https://api.pfserver.net";
 const DEMO_API_BASE = "https://api-sand.pfserver.net";
@@ -106,6 +107,23 @@ export async function findPagueloFacilTransaction(codOper: string) {
   return data.data[0] ?? null;
 }
 
+// La URL de retorno se genera en el servidor por intent y el proveedor la
+// devuelve en urlString desde su API autenticada: vincula transacción e intent.
+export function isPagueloFacilTransactionLinkedToIntent(
+  tx: PagueloFacilTransaction | null,
+  codOper: string,
+  intentId: string
+) {
+  if (!tx || String(tx.codOper ?? "") !== codOper || !tx.urlString) return false;
+
+  try {
+    const url = new URL(tx.urlString);
+    return url.pathname === RETURN_PATH && url.searchParams.get("intent") === intentId;
+  } catch {
+    return false;
+  }
+}
+
 export function isApprovedPagueloFacilTransaction(tx: PagueloFacilTransaction | null, amount: number) {
   if (!tx) return false;
   const paidAmount = Number(tx.totalPay ?? tx.authAmount ?? tx.amount ?? tx.requestPayAmount ?? 0);
@@ -118,7 +136,6 @@ export function isApprovedPagueloFacilTransaction(tx: PagueloFacilTransaction | 
   );
 }
 
-export function getPlanAmount(plan: { priceMonthly: string; priceAnnual: string }, cycle: BillingCycle) {
-  const raw = cycle === "annual" ? plan.priceAnnual : plan.priceMonthly;
-  return Number(raw.replace(/[^0-9.]/g, ""));
-}
+// Regla de Monexity, no del proveedor: vive en lib/billing/plans.
+// Se reexporta por compatibilidad con los importadores existentes.
+export { getPlanAmount } from "./billing/plans";

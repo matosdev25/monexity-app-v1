@@ -1,11 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createPortal } from "react-dom";
 import { formatLongDate } from "../../../lib/date-format";
 import { formatCurrency } from "../../../lib/currency-format";
 import { recordPayment } from "./actions";
+import { ButtonSpinner } from "@/components/button-spinner";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import type { SalePaymentMethodOption } from "./types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -246,8 +248,11 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="h-10 w-full rounded-2xl bg-emerald-600 px-4 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+      aria-disabled={pending}
+      aria-busy={pending}
+      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-emerald-500 dark:hover:bg-emerald-400"
     >
+      {pending ? <ButtonSpinner variant="current" /> : null}
       {pending ? "Guardando..." : "Registrar pago"}
     </button>
   );
@@ -307,17 +312,7 @@ export function RecordPaymentModal({
 
   useEffect(() => {
     if (!open) return;
-    const scrollContainer = document.querySelector<HTMLElement>("[data-scroll-container]");
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") handleClose(); };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    if (scrollContainer) scrollContainer.style.overflowY = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-      if (scrollContainer) scrollContainer.style.overflowY = "";
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return lockBodyScroll();
   }, [open]);
 
   function handleClose() {
@@ -330,6 +325,10 @@ export function RecordPaymentModal({
     setNote("");
     formRef.current?.reset();
   }
+
+  // Foco, Tab confinado, Escape y retorno de foco al disparador
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose: handleClose });
 
   async function handleDownloadPdf() {
     if (!receipt) return;
@@ -378,7 +377,12 @@ export function RecordPaymentModal({
             />
             <div className="absolute inset-0 overflow-y-auto overscroll-contain p-4">
               <div className="flex min-h-full items-center justify-center">
-                <div className="relative my-4 w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+                <div
+                  ref={panelRef}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby={titleId}
+                  className="relative my-4 w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-5 outline-none shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
 
                   {phase === "form" && (
                     <>
@@ -387,7 +391,7 @@ export function RecordPaymentModal({
                           <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
                             Abono
                           </p>
-                          <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                          <h3 id={titleId} className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                             Registrar pago
                           </h3>
                           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -400,6 +404,7 @@ export function RecordPaymentModal({
                         <button
                           type="button"
                           onClick={handleClose}
+                          aria-label="Cerrar"
                           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 text-slate-400 transition hover:text-slate-900 dark:border-slate-700 dark:hover:text-slate-100"
                         >
                           ✕
@@ -491,13 +496,14 @@ export function RecordPaymentModal({
                           <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
                             Pago registrado
                           </p>
-                          <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                          <h3 id={titleId} className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                             Comprobante de pago
                           </h3>
                         </div>
                         <button
                           type="button"
                           onClick={handleClose}
+                          aria-label="Cerrar"
                           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 text-slate-400 transition hover:text-slate-900 dark:border-slate-700 dark:hover:text-slate-100"
                         >
                           ✕
@@ -555,8 +561,10 @@ export function RecordPaymentModal({
                           type="button"
                           onClick={handleDownloadPdf}
                           disabled={pdfBusy}
-                          className="h-10 w-full rounded-2xl bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                          aria-busy={pdfBusy}
+                          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                         >
+                          {pdfBusy ? <ButtonSpinner variant="current" /> : null}
                           {pdfBusy ? "Generando PDF..." : "Descargar comprobante PDF"}
                         </button>
                         <button

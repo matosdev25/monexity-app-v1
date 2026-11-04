@@ -183,6 +183,8 @@ export function CompanySwitcher({
       {open && (
         <div
           role="listbox"
+          // Escape cierra primero este desplegable, no el diálogo que lo contiene
+          data-escape-layer=""
           className={[
             "absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-[20px]",
             "border border-slate-200/80 bg-white",

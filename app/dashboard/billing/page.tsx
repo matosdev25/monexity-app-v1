@@ -3,8 +3,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PLAN_MAP } from "@/lib/plans/plans";
 import { formatShortDate } from "@/lib/date-format";
-import { hasValidTrialToday, isTrialEndingToday } from "@/lib/memberships/app-access";
+import { hasValidPaidPeriod, hasValidTrialToday, isTrialEndingToday } from "@/lib/memberships/app-access";
 import { PaymentFlow } from "./payment-flow";
+import { TilopayReturnStatus } from "./tilopay-return-status";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const metadata = { title: "Plan y facturación — Monexity" };
 
@@ -31,7 +34,7 @@ const PLAN_LABELS: Record<string, string> = {
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ pf?: string; reason?: string; trialPlanUpdated?: string }>;
+  searchParams?: Promise<{ pf?: string; reason?: string; trialPlanUpdated?: string; tilopay?: string; intent?: string }>;
 }) {
   const params = searchParams ? await searchParams : {};
   const supabase = await createClient();
@@ -92,9 +95,10 @@ export default async function BillingPage({
     .from("payment_intents")
     .select("id, status, exact_amount, expires_at, plan_id, billing_cycle, checkout_url")
     .eq("company_id", activeCompanyId)
-    .eq("provider", "paguelofacil")
+    .eq("provider", "tilopay")
     .in("status", ["pending", "claimed", "awaiting_verification"])
-    .gt("expires_at", new Date().toISOString())
+    // Un pago en verificación sigue visible aunque haya vencido: nunca se abandona.
+    .or(`expires_at.gt.${new Date().toISOString()},status.eq.awaiting_verification`)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -126,7 +130,8 @@ export default async function BillingPage({
 
   const isActive = status === "active";
   const isPaid = status === "paid";
-  const hasPaidAccess = isActive || isPaid;
+  const hasPaidAccess = hasValidPaidPeriod(company);
+  const paidPeriodExpired = (isActive || isPaid) && !hasPaidAccess;
   const isTrialing = status === "trialing";
   const hasValidTrial = isTrialing && hasValidTrialToday(trialEnd);
   const trialEnded = isTrialing && !hasValidTrial;
@@ -135,12 +140,22 @@ export default async function BillingPage({
     ? "Pago pendiente de confirmación"
     : trialEnded
     ? "Prueba vencida"
+    : paidPeriodExpired
+    ? STATUS_LABELS.expired
     : STATUS_LABELS[status] ?? status;
   const needsPayment = !hasPaidAccess && !hasValidTrial;
   const currentPlanName = PLAN_LABELS[planId ?? ""] ?? "seleccionado";
   const updatedTrialPlanName = params.trialPlanUpdated
     ? PLAN_MAP[params.trialPlanUpdated]?.name ?? null
     : null;
+
+  // Verificación Tilopay: al volver del checkout o si hay un pago en verificación.
+  const tilopayVerifyIntentId =
+    params.tilopay === "return" && UUID_RE.test(params.intent ?? "")
+      ? params.intent!
+      : activeIntent?.status === "awaiting_verification"
+      ? activeIntent.id
+      : null;
 
   const daysLeft = periodEnd
     ? Math.ceil((new Date(periodEnd).getTime() - nowTime) / 86_400_000)
@@ -168,9 +183,23 @@ export default async function BillingPage({
         </div>
       )}
 
-      {params.pf === "error" && (
+      {params.pf === "error" && params.reason === "payment_in_review" && (
+        <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+          Recibimos tu pago, pero tu período ya estaba cubierto. Lo estamos revisando; no vuelvas a pagar, te contactaremos.
+        </div>
+      )}
+
+      {params.pf === "error" && params.reason !== "payment_in_review" && (
         <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
           No pudimos confirmar el pago automáticamente. Intenta nuevamente o contáctanos.
+        </div>
+      )}
+
+      {tilopayVerifyIntentId && <TilopayReturnStatus key={tilopayVerifyIntentId} intentId={tilopayVerifyIntentId} />}
+
+      {params.tilopay === "error" && (
+        <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+          No pudimos identificar el pago al volver de Tilopay. Si se realizó un cargo, no vuelvas a pagar y contáctanos.
         </div>
       )}
 

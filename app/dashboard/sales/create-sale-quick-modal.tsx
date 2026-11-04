@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { SalePaymentMethodOption } from "./types";
@@ -71,20 +72,15 @@ export function CreateSaleQuickModal({
     setOpen(true);
   }, []);
 
-  // Scroll lock + Escape — closeModal es estable, no causa re-runs extras
+  // Scroll lock compartido (soporta modales anidados como el plan de cuotas)
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") closeModal(); };
-    const scrollContainer = document.querySelector<HTMLElement>("[data-scroll-container]");
-    document.addEventListener("keydown", onKeyDown);
-    document.body.style.overflow = "hidden";
-    if (scrollContainer) scrollContainer.style.overflowY = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "";
-      if (scrollContainer) scrollContainer.style.overflowY = "";
-    };
-  }, [open, closeModal]);
+    return lockBodyScroll();
+  }, [open]);
+
+  // Foco, Tab confinado, Escape y retorno de foco al disparador
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose: closeModal });
 
   // Portal persiste una vez que se abre por primera vez.
   // display:none cuando está cerrado → cero React work en opens posteriores.
@@ -104,13 +100,19 @@ export function CreateSaleQuickModal({
 
             <div className="absolute inset-0 overflow-y-auto overscroll-contain p-4">
               <div className="flex min-h-full items-center justify-center">
-                <div key={animKey} className="animate-mx-scale-in relative my-4 w-full max-w-xl rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+                <div
+                  key={animKey}
+                  ref={panelRef}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby={titleId}
+                  className="animate-mx-scale-in relative my-4 w-full max-w-xl rounded-[28px] border border-slate-200 bg-white p-5 outline-none shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm text-slate-500 dark:text-slate-400">
                         Registro rápido
                       </p>
-                      <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                      <h2 id={titleId} className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                         Nueva venta
                       </h2>
                       <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
@@ -153,7 +155,8 @@ export function CreateSaleQuickModal({
         <div
           role="button"
           tabIndex={0}
-          className="cursor-pointer"
+          aria-haspopup="dialog"
+          className="cursor-pointer rounded-[20px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
           onClick={openModal}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {

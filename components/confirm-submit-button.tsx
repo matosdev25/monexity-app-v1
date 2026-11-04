@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { ButtonSpinner } from "./button-spinner";
+import { useModalAccessibility } from "./modal-accessibility";
 
 type ConfirmSubmitButtonProps = {
   label: string;
@@ -32,9 +34,17 @@ function TriggerButton({
       onClick={onOpen}
       disabled={pending}
       aria-disabled={pending}
-      className={`transition-[opacity,transform] duration-150 active:scale-[0.97] active:opacity-90 disabled:pointer-events-none ${className ?? ""}`}
+      aria-busy={pending}
+      className={`transition-[opacity,transform] duration-150 active:scale-[0.97] active:opacity-90 disabled:pointer-events-none disabled:opacity-70 ${className ?? ""}`}
     >
-      {pending ? pendingLabel : label}
+      {pending ? (
+        <span className="inline-flex items-center justify-center gap-2">
+          <ButtonSpinner variant="current" />
+          {pendingLabel}
+        </span>
+      ) : (
+        label
+      )}
     </button>
   );
 }
@@ -58,10 +68,16 @@ export function ConfirmSubmitButton({
 
   const closeDialog = () => setOpen(false);
 
+  // Foco inicial en "Cancelar" (primer control), Tab confinado, Escape y retorno al disparador
+  const titleId = useId();
+  const descriptionId = useId();
+  const panelRef = useModalAccessibility({ open, onClose: closeDialog });
+
   const handleConfirm = () => {
     const form = formRef.current;
     if (!form) return;
     closeDialog();
+    // El trigger queda deshabilitado mientras el form está pendiente (useFormStatus)
     form.requestSubmit();
   };
 
@@ -83,18 +99,24 @@ export function ConfirmSubmitButton({
             aria-hidden="true"
           />
           {/* Panel */}
-          <div className="animate-mx-scale-in relative w-full max-w-115 overflow-hidden rounded-[28px] border border-app bg-[rgba(255,255,255,0.92)] p-0 text-app shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:bg-[rgba(15,23,42,0.92)] dark:text-white dark:shadow-[0_24px_80px_rgba(2,6,23,0.50)]">
+          <div
+            ref={panelRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={descriptionId}
+            className="animate-mx-scale-in relative w-full max-w-115 overflow-hidden rounded-[28px] border border-app bg-[rgba(255,255,255,0.92)] p-0 outline-none text-app shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:bg-[rgba(15,23,42,0.92)] dark:text-white dark:shadow-[0_24px_80px_rgba(2,6,23,0.50)]">
             <div className="rounded-[28px] border border-app bg-app-panel p-5">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-rose-500/80 dark:text-rose-300/80">
                   Confirmación
                 </p>
 
-                <h3 className="mt-1 text-xl font-semibold tracking-tight text-app">
+                <h3 id={titleId} className="mt-1 text-xl font-semibold tracking-tight text-app">
                   {title}
                 </h3>
 
-                <p className="mt-3 text-sm leading-6 text-app-muted">
+                <p id={descriptionId} className="mt-3 text-sm leading-6 text-app-muted">
                   {confirmMessage}
                 </p>
               </div>

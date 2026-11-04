@@ -2,6 +2,12 @@
 -- MONEXITY — PagueloFacil para membresías SaaS
 -- Ejecutar en Supabase SQL Editor antes de activar el checkout.
 -- No modifica RLS existente; solo agrega metadata al payment_intent SaaS.
+--
+-- Estado en Monexi: aplicado parcialmente. intent_type, columnas de companies
+-- y activate_subscription_from_intent se desplegaron vía
+-- supabase-payments-a1-a2.sql. La versión de 7 parámetros de
+-- create_paguelofacil_payment_intent (y el DROP de la de 6) NO está aplicada;
+-- en producción sigue la de 6 (ver supabase-security-hardening.sql).
 -- ================================================================
 
 ALTER TABLE payment_intents
@@ -60,7 +66,7 @@ BEGIN
     RAISE EXCEPTION 'INVALID_INTENT_TYPE';
   END IF;
 
-  IF auth.uid() != p_user_id THEN
+  IF auth.uid() IS NULL OR auth.uid() IS DISTINCT FROM p_user_id THEN
     RAISE EXCEPTION 'FORBIDDEN';
   END IF;
 
@@ -108,7 +114,8 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION create_paguelofacil_payment_intent TO authenticated;
+REVOKE EXECUTE ON FUNCTION create_paguelofacil_payment_intent(uuid, uuid, text, text, numeric, timestamptz, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION create_paguelofacil_payment_intent(uuid, uuid, text, text, numeric, timestamptz, text) TO authenticated, service_role;
 
 -- Un pago normal renueva/extiende el período. Un upgrade solo cambia el plan
 -- luego de confirmarse la diferencia y conserva las fechas del período actual.
@@ -200,3 +207,7 @@ BEGIN
       ));
 END;
 $$;
+
+-- Solo service_role (aprobación admin y retorno server-side).
+REVOKE EXECUTE ON FUNCTION activate_subscription_from_intent(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION activate_subscription_from_intent(uuid, text) TO service_role;

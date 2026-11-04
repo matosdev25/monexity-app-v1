@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import { createPortal } from "react-dom";
 import { ButtonSpinner } from "@/components/button-spinner";
 import { formatShortDate } from "@/lib/date-format";
@@ -113,17 +114,12 @@ export function SaleDetailModal({ sale, company, canManagePayments = true }: Pro
 
   useEffect(() => {
     if (!open) return;
-    const sc = document.querySelector<HTMLElement>("[data-scroll-container]");
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    if (sc) sc.style.overflowY = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-      if (sc) sc.style.overflowY = "";
-    };
+    return lockBodyScroll();
   }, [open]);
+
+  // Foco, Tab confinado, Escape y retorno de foco al disparador
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose: () => setOpen(false) });
 
   function openEdit(p: PaymentRow) {
     setEditValues((prev) => ({
@@ -237,7 +233,12 @@ export function SaleDetailModal({ sale, company, canManagePayments = true }: Pro
             />
             <div className="absolute inset-0 overflow-y-auto overscroll-contain p-4">
               <div className="flex min-h-full items-start justify-center py-8">
-                <div className="relative w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+                <div
+                  ref={panelRef}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby={titleId}
+                  className="relative w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-5 outline-none shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
 
                   {/* Header */}
                   <div className="flex items-start justify-between gap-4">
@@ -245,7 +246,7 @@ export function SaleDetailModal({ sale, company, canManagePayments = true }: Pro
                       <p className="text-[11px] uppercase tracking-[0.18em] text-sky-700/70 dark:text-cyan-300/70">
                         Factura {sale.invoice_number ?? "Sin factura"}
                       </p>
-                      <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                      <h3 id={titleId} className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                         Detalle de venta
                       </h3>
                       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -256,6 +257,7 @@ export function SaleDetailModal({ sale, company, canManagePayments = true }: Pro
                     </div>
                     <button
                       type="button"
+                      aria-label="Cerrar"
                       onClick={() => setOpen(false)}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 text-slate-400 transition hover:text-slate-900 dark:border-slate-700 dark:hover:text-slate-100"
                     >

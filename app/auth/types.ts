@@ -7,6 +7,7 @@ export type SignUpState = {
     email?: string;
     phone?: string;
     password?: string;
+    acceptLegal?: string;
   };
 };
 

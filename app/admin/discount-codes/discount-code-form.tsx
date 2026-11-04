@@ -21,16 +21,17 @@ export function DiscountCodeForm() {
       <div>
         <p className="text-lg font-semibold text-app">Crear código</p>
         <p className="mt-1 text-sm text-app-muted">
-          Los códigos se validan en servidor. El total final debe ser mayor a $0.00.
+          Los códigos se validan en servidor. El total final con descuento no puede ser menor a $1.50.
         </p>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <input name="code" placeholder="LANZAMIENTO25" className={inputClass} required />
-        <input name="description" placeholder="Descripción interna" className={inputClass} />
+        <input name="code" aria-label="Código" placeholder="LANZAMIENTO25" className={inputClass} required />
+        <input name="description" aria-label="Descripción interna" placeholder="Descripción interna" className={inputClass} />
 
         <select
           name="discountType"
+          aria-label="Tipo de descuento"
           className={inputClass}
           value={discountType}
           onChange={(event) => setDiscountType(event.target.value)}
@@ -41,6 +42,7 @@ export function DiscountCodeForm() {
 
         <input
           name="discountValue"
+          aria-label="Valor del descuento"
           type="number"
           min="0.01"
           max={discountType === "percentage" ? "99.99" : undefined}
@@ -50,27 +52,30 @@ export function DiscountCodeForm() {
           required
         />
 
-        <select name="appliesTo" className={inputClass} defaultValue="both">
+        <select name="appliesTo" aria-label="Aplica a" className={inputClass} defaultValue="both">
           <option value="both">Mensual y anual</option>
           <option value="monthly">Solo mensual</option>
           <option value="yearly">Solo anual</option>
         </select>
 
-        <input name="maxUses" type="number" min="0" step="1" placeholder="Límite de usos opcional" className={inputClass} />
+        <input name="maxUses" aria-label="Límite de usos" type="number" min="0" step="1" placeholder="Límite de usos opcional" className={inputClass} />
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-app-muted">Inicio</label>
-          <input name="startsAt" type="datetime-local" className={inputClass} />
+          <label htmlFor="discount-starts-at" className="mb-1.5 block text-xs font-medium text-app-muted">Inicio</label>
+          <input id="discount-starts-at" name="startsAt" type="datetime-local" className={inputClass} />
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-app-muted">Expiración</label>
-          <input name="expiresAt" type="datetime-local" className={inputClass} />
+          <label htmlFor="discount-expires-at" className="mb-1.5 block text-xs font-medium text-app-muted">Expiración</label>
+          <input id="discount-expires-at" name="expiresAt" type="datetime-local" className={inputClass} />
         </div>
       </div>
 
       {state.message && (
-        <p className={`mt-3 text-sm ${state.success ? "text-emerald-600" : "text-rose-600"}`}>
+        <p
+          role={state.success ? "status" : "alert"}
+          className={`mt-3 text-sm ${state.success ? "text-emerald-600 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"}`}
+        >
           {state.message}
         </p>
       )}

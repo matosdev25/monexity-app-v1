@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Monexity
 
-## Getting Started
+SaaS para pequeños negocios en Panamá: ventas, gastos, inventario, cotizaciones y facturas desde un solo lugar.
 
-First, run the development server:
+La fuente de verdad del producto (alcance, arquitectura, branding y reglas) es [`PROJECT.md`](./PROJECT.md). Las reglas para agentes están en `AGENTS.md` y `claude.md`.
+
+## Stack
+
+- Next.js 16 (App Router, Server Components, Server Actions) — `proxy.ts` para sesión y rutas protegidas.
+- Supabase (Auth, PostgreSQL con RLS, Storage).
+- Tailwind CSS 4.
+
+## Desarrollo
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev     # http://localhost:3000
+npm run lint
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+El proyecto usa `chatg` para la orquestación local.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variables de entorno
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Definidas en `.env.local` (nunca se suben al repositorio). Solo las `NEXT_PUBLIC_*` llegan al navegador; `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET` y las credenciales de pago son exclusivamente de servidor.
 
-## Learn More
+| Variable | Uso |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Cliente de Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | Operaciones de servidor (admin client) |
+| `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SITE_URL` | URLs públicas (correos, retornos de pago) |
+| `BILLING_ADMIN_EMAILS` | Correos con acceso al admin global (`/admin`) |
+| `CRON_SECRET` | Autoriza los cron de `vercel.json` |
+| `WAITLIST_MODE` | `true` limita el sitio a la homepage y legales |
+| `YAPPY_PHONE_NUMBER`, `NEXT_PUBLIC_WHATSAPP_NUMBER` | Pago por Yappy y contacto |
+| `PAGUELOFACIL_*`, `TILOPAY_*` | Pasarelas de pago |
 
-To learn more about Next.js, take a look at the following resources:
+## Base de datos
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Los archivos `supabase-*.sql` de la raíz documentan las migraciones aplicadas en el proyecto de Supabase (cada encabezado indica su estado). Antes de cambiar tablas, RLS o RPC, verificar el estado remoto.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Tareas programadas (`vercel.json`)
 
-## Deploy on Vercel
+- `/api/cron/expire-intents` — expira intentos de pago vencidos y depura cobros conservados cuyo plazo terminó.
+- `/api/cron/purge-unconfirmed-signups` — elimina registros que no confirmaron el correo en 7 días.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+<!-- Nota: documentación informativa; no afecta el comportamiento de la app. -->

@@ -9,6 +9,7 @@ import { fetchActivePaymentMethods } from "../../sales/actions";
 import { fetchActiveServices } from "../../mi-negocio/services-actions";
 import { EditQuotationForm, ConvertSection } from "./edit-quotation-form";
 import { ConfirmSubmitButton } from "../../../../components/confirm-submit-button";
+import { FormSubmitButton } from "../../../../components/submit-button";
 import type { Quotation, QuotationItem } from "../types";
 
 function getStatusLabel(status: string) {
@@ -334,12 +335,12 @@ export default async function QuotationDetailPage({ params }: Props) {
                     <form action={changeQuotationStatus} key={status}>
                       <input type="hidden" name="quotationId" value={quotation.id} />
                       <input type="hidden" name="status" value={status} />
-                      <button
-                        type="submit"
+                      <FormSubmitButton
+                        pendingText="Actualizando..."
                         className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100"
                       >
                         {label}
-                      </button>
+                      </FormSubmitButton>
                     </form>
                   ))}
                 </div>
@@ -361,6 +362,7 @@ export default async function QuotationDetailPage({ params }: Props) {
               <input type="hidden" name="quotationId" value={quotation.id} />
               <ConfirmSubmitButton
                 label="Eliminar cotización"
+                pendingLabel="Eliminando..."
                 title="Eliminar cotización"
                 confirmMessage={`Se eliminará permanentemente la cotización ${quotation.quotation_number ?? ""}.`}
                 confirmLabel="Sí, eliminar"

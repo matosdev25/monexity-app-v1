@@ -1,6 +1,7 @@
 "use client";
 
-import { useTransition, useState } from "react";
+import { useRef, useTransition, useState } from "react";
+import { ButtonSpinner } from "@/components/button-spinner";
 import {
   createPaymentMethod,
   updatePaymentMethod,
@@ -82,6 +83,24 @@ export function PaymentMethodsSection({ methods, companyId, canEdit }: Props) {
   const [newLabel, setNewLabel] = useState(TYPE_LABELS.cash ?? "");
   const [newDetails, setNewDetails] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Guarda síncrona: bloquea un segundo clic antes de que isPending se renderice
+  const busyRef = useRef(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const isBusy = isPending || pendingAction !== null;
+
+  function runAction(key: string, action: () => Promise<void>) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setPendingAction(key);
+    startTransition(async () => {
+      try {
+        await action();
+      } finally {
+        busyRef.current = false;
+        setPendingAction(null);
+      }
+    });
+  }
 
   function startEdit(m: CompanyPaymentMethod) {
     setEditingId(m.id);
@@ -104,9 +123,9 @@ export function PaymentMethodsSection({ methods, companyId, canEdit }: Props) {
   }
 
   function handleToggle(id: string) {
-    if (!canEdit) return;
+    if (!canEdit || busyRef.current) return;
     setError(null);
-    startTransition(async () => {
+    runAction(`toggle:${id}`, async () => {
       const fd = new FormData();
       fd.set("id", id);
       fd.set("companyId", companyId);
@@ -115,11 +134,11 @@ export function PaymentMethodsSection({ methods, companyId, canEdit }: Props) {
   }
 
   function handleDelete(id: string) {
-    if (!canEdit) return;
+    if (!canEdit || busyRef.current) return;
     if (!confirm("¿Eliminar este método de pago? Esta acción no se puede deshacer."))
       return;
     setError(null);
-    startTransition(async () => {
+    runAction(`delete:${id}`, async () => {
       const fd = new FormData();
       fd.set("id", id);
       fd.set("companyId", companyId);
@@ -128,9 +147,9 @@ export function PaymentMethodsSection({ methods, companyId, canEdit }: Props) {
   }
 
   function handleMove(id: string, direction: "up" | "down") {
-    if (!canEdit) return;
+    if (!canEdit || busyRef.current) return;
     setError(null);
-    startTransition(async () => {
+    runAction(`move:${id}`, async () => {
       const fd = new FormData();
       fd.set("id", id);
       fd.set("companyId", companyId);
@@ -140,9 +159,9 @@ export function PaymentMethodsSection({ methods, companyId, canEdit }: Props) {
   }
 
   function handleSaveEdit() {
-    if (!editingId || !editLabel.trim()) return;
+    if (!editingId || !editLabel.trim() || busyRef.current) return;
     setError(null);
-    startTransition(async () => {
+    runAction("save", async () => {
       const fd = new FormData();
       fd.set("id", editingId);
       fd.set("companyId", companyId);
@@ -158,9 +177,9 @@ export function PaymentMethodsSection({ methods, companyId, canEdit }: Props) {
   }
 
   function handleCreate() {
-    if (!newLabel.trim()) return;
+    if (!newLabel.trim() || busyRef.current) return;
     setError(null);
-    startTransition(async () => {
+    runAction("create", async () => {
       const fd = new FormData();
       fd.set("companyId", companyId);
       fd.set("type", newType);
@@ -212,7 +231,10 @@ export function PaymentMethodsSection({ methods, companyId, canEdit }: Props) {
       ) : null}
 
       {/* Lista */}
-      <div className={`space-y-1.5 ${isPending ? "pointer-events-none opacity-60" : ""}`}>
+      <div
+        aria-busy={isBusy}
+        className={`space-y-1.5 ${isBusy ? "pointer-events-none opacity-60" : ""}`}
+      >
         {methods.length === 0 && !adding ? (
           <p className="text-sm text-app-soft">
             No hay métodos de pago configurados.
@@ -264,10 +286,13 @@ export function PaymentMethodsSection({ methods, companyId, canEdit }: Props) {
                     <button
                       type="button"
                       onClick={handleSaveEdit}
-                      disabled={!editLabel.trim()}
-                      className="rounded-[10px] bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-700 disabled:opacity-50 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
+                      disabled={!editLabel.trim() || isBusy}
+                      aria-disabled={!editLabel.trim() || isBusy}
+                      aria-busy={pendingAction === "save"}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-700 disabled:opacity-50 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
                     >
-                      Guardar
+                      {pendingAction === "save" ? <ButtonSpinner variant="current" /> : null}
+                      {pendingAction === "save" ? "Guardando..." : "Guardar"}
                     </button>
                     <button
                       type="button"
@@ -344,9 +369,13 @@ export function PaymentMethodsSection({ methods, companyId, canEdit }: Props) {
                         <button
                           type="button"
                           onClick={() => handleDelete(m.id)}
-                          className="rounded-[8px] border border-rose-200/80 bg-rose-50/80 px-2.5 py-1.5 text-[11px] text-rose-600 transition hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/15"
+                          disabled={isBusy}
+                          aria-disabled={isBusy}
+                          aria-busy={pendingAction === `delete:${m.id}`}
+                          className="inline-flex items-center justify-center gap-1 rounded-[8px] border border-rose-200/80 bg-rose-50/80 px-2.5 py-1.5 text-[11px] text-rose-600 transition hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/15"
                         >
-                          Eliminar
+                          {pendingAction === `delete:${m.id}` ? <ButtonSpinner variant="current" /> : null}
+                          {pendingAction === `delete:${m.id}` ? "Eliminando..." : "Eliminar"}
                         </button>
                       </div>
                     </div>
@@ -405,10 +434,13 @@ export function PaymentMethodsSection({ methods, companyId, canEdit }: Props) {
                 <button
                   type="button"
                   onClick={handleCreate}
-                  disabled={!newLabel.trim()}
-                  className="rounded-[10px] bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-700 disabled:opacity-50 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
+                  disabled={!newLabel.trim() || isBusy}
+                  aria-disabled={!newLabel.trim() || isBusy}
+                  aria-busy={pendingAction === "create"}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-700 disabled:opacity-50 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
                 >
-                  Agregar
+                  {pendingAction === "create" ? <ButtonSpinner variant="current" /> : null}
+                  {pendingAction === "create" ? "Agregando..." : "Agregar"}
                 </button>
                 <button
                   type="button"

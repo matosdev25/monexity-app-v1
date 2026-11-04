@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
+import { useModalAccessibility } from "@/components/modal-accessibility";
 import { useRouter } from "next/navigation";
 import { ButtonSpinner } from "@/components/button-spinner";
+import { FormSubmitButton } from "@/components/submit-button";
 import { formatShortDate } from "@/lib/date-format";
 import { formatCurrency } from "@/lib/currency-format";
 import { changeQuotationStatus } from "./actions";
@@ -67,6 +69,9 @@ export function QuotationManagementModal({
   const quotationTotal = Number(quotation.total ?? 0);
 
   const closeModal = useCallback(() => setOpen(false), []);
+  // Foco, Tab confinado, Escape y retorno de foco al disparador
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose: closeModal });
   const refreshQuotation = useCallback(() => router.refresh(), [router]);
 
   async function downloadPdf() {
@@ -235,7 +240,13 @@ export function QuotationManagementModal({
       const summaryX = 118;
       const summaryW = 76;
       const discountAmount = Number(quotation.discount_amount ?? 0);
-      const summaryH = discountAmount > 0 ? 38 : 30;
+      const taxAmount = Number(quotation.tax_amount ?? 0);
+      // Mismas líneas que la cotización guardada: subtotal, descuento, impuesto y total
+      const extraLines = [
+        ...(discountAmount > 0 ? [{ label: "Descuento", value: `-${formatCurrency(discountAmount)}`, rose: true }] : []),
+        ...(taxAmount > 0 ? [{ label: "Impuesto", value: `+${formatCurrency(taxAmount)}`, rose: false }] : []),
+      ];
+      const summaryH = 30 + extraLines.length * 9;
       y = ensurePage(y, summaryH + 4);
       drawCard(summaryX, y, summaryW, summaryH, [255, 255, 255]);
       doc.setFont("helvetica", "normal");
@@ -244,14 +255,15 @@ export function QuotationManagementModal({
       doc.text("Subtotal", summaryX + 6, y + 10);
       textColor(slate950);
       doc.text(formatCurrency(Number(quotation.subtotal ?? 0)), summaryX + summaryW - 6, y + 10, { align: "right" });
-      let totalY = y + 20;
-      if (discountAmount > 0) {
+      extraLines.forEach((line, index) => {
+        const lineY = y + 19 + index * 9;
         textColor(slate500);
-        doc.text("Descuento", summaryX + 6, y + 19);
-        doc.setTextColor(225, 29, 72);
-        doc.text(`-${formatCurrency(discountAmount)}`, summaryX + summaryW - 6, y + 19, { align: "right" });
-        totalY = y + 29;
-      }
+        doc.text(line.label, summaryX + 6, lineY);
+        if (line.rose) doc.setTextColor(225, 29, 72);
+        else textColor(slate950);
+        doc.text(line.value, summaryX + summaryW - 6, lineY, { align: "right" });
+      });
+      const totalY = y + 20 + extraLines.length * 9;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       textColor(blue900);
@@ -307,13 +319,18 @@ export function QuotationManagementModal({
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-3 py-4 backdrop-blur-[2px] motion-reduce:backdrop-blur-none sm:px-6">
-          <div className="flex max-h-[90dvh] w-full max-w-[980px] flex-col overflow-hidden rounded-[28px] border border-white/70 bg-slate-100 shadow-[0_24px_80px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-950">
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            className="flex max-h-[90dvh] w-full max-w-[980px] flex-col overflow-hidden rounded-[28px] border border-white/70 bg-slate-100 outline-none shadow-[0_24px_80px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-950">
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-900 sm:px-6">
               <div className="min-w-0">
                 <p className="text-xs font-medium uppercase tracking-[0.18em] text-sky-700 dark:text-cyan-300">
                   Gestionar cotización
                 </p>
-                <h2 className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                <h2 id={titleId} className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                   {quotation.quotation_number ?? "Sin número"} · {quotation.customer_name?.trim() || "Cliente general"}
                 </h2>
               </div>
@@ -371,12 +388,12 @@ export function QuotationManagementModal({
                         <form action={changeQuotationStatus} key={status}>
                           <input type="hidden" name="quotationId" value={quotation.id} />
                           <input type="hidden" name="status" value={status} />
-                          <button
-                            type="submit"
+                          <FormSubmitButton
+                            pendingText="Actualizando..."
                             className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 transition-[background-color,border-color,color,transform] duration-[180ms] hover:border-slate-300 hover:bg-white hover:text-slate-900 active:scale-[0.98] dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100"
                           >
                             {label}
-                          </button>
+                          </FormSubmitButton>
                         </form>
                       ))}
                     </div>
@@ -424,8 +441,10 @@ export function QuotationManagementModal({
                   type="button"
                   onClick={downloadPdf}
                   disabled={pdfBusy}
-                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-[background-color,border-color,color,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-900 dark:hover:text-white"
+                  aria-busy={pdfBusy}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-[background-color,border-color,color,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-900 dark:hover:text-white"
                 >
+                  {pdfBusy ? <ButtonSpinner variant="current" /> : null}
                   {pdfBusy ? "Generando PDF..." : "Descargar cotización en PDF"}
                 </button>
                 <button

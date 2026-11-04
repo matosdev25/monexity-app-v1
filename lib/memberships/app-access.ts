@@ -68,6 +68,19 @@ export function isTrialEndingToday(trialEndsAt: string | null) {
   return Boolean(trialEndDate && today && trialEndDate === today);
 }
 
+// Acceso pagado vigente: estado pagado y período con fin válido en el futuro.
+// Un `active` vencido no conserva acceso y puede renovarse.
+export function hasValidPaidPeriod(company: {
+  subscription_status: string | null;
+  current_period_ends_at: string | null;
+}) {
+  const status = String(company.subscription_status ?? "").toLowerCase();
+  if (!["active", "paid"].includes(status) || !company.current_period_ends_at) return false;
+
+  const endsAt = new Date(company.current_period_ends_at).getTime();
+  return Number.isFinite(endsAt) && endsAt > Date.now();
+}
+
 export function canAccessCompanyApp(company: AppAccessCompany) {
   if (company.is_blocked || !company.subscription_plan) return false;
 
@@ -76,19 +89,7 @@ export function canAccessCompanyApp(company: AppAccessCompany) {
     return hasValidTrialToday(company.trial_ends_at);
   }
 
-  if (["active", "paid"].includes(status)) {
-    if (
-      company.subscription_cancel_at_period_end &&
-      company.current_period_ends_at &&
-      new Date(company.current_period_ends_at).getTime() <= Date.now()
-    ) {
-      return false;
-    }
-
-    return true;
-  }
-
-  return false;
+  return hasValidPaidPeriod(company);
 }
 
 export async function hasPendingYappyManualPayment(

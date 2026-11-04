@@ -4,6 +4,7 @@ import { formatShortDate } from "../../../lib/date-format";
 import { formatCurrency } from "../../../lib/currency-format";
 import { hasValidTrialToday, isTrialEndingToday } from "../../../lib/memberships/app-access";
 import { CancelMembershipButton } from "./cancel-membership-button";
+import { DeleteAccountForm } from "./delete-account-form";
 
 type AccountSectionProps = {
   companyId: string;
@@ -56,6 +57,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const PAYMENT_PROVIDER_LABELS: Record<string, string> = {
   paguelofacil: "PagueloFácil",
+  tilopay: "Tarjeta (Tilopay)",
   yappy_manual: "Yappy",
 };
 
@@ -223,6 +225,8 @@ export function AccountSection({ companyId, canCancel, company, latestPayment, p
           <CancelMembershipButton companyId={companyId} />
         )}
       </div>
+
+      <DeleteAccountForm />
     </section>
   );
 }

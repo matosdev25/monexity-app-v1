@@ -1,5 +1,6 @@
-import { PageLoader } from "@/components/page-loader";
+import { BusinessPageSkeleton } from "@/components/page-skeletons";
 
+// /dashboard/team redirige a Mi negocio → Equipo; se muestra ese layout
 export default function TeamLoading() {
-  return <PageLoader />;
+  return <BusinessPageSkeleton tab="equipo" />;
 }

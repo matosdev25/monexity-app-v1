@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
+import { useResolvedTheme } from "@/components/theme-clock";
 import { ThemeSelector } from "@/components/theme-selector";
 import { LogoutButton } from "@/components/logout-button";
 import { CompanySwitcher } from "@/components/company-switcher";
@@ -153,17 +154,11 @@ function isActive(pathname: string, href: string) {
 
 // ── Compact theme button (tablet rail) ───────────────────────────────
 
-const subscribe = () => () => {};
-const getClientSnapshot = () => true;
-const getServerSnapshot = () => false;
-
 function CompactThemeButton() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const mounted = useSyncExternalStore(
-    subscribe,
-    getClientSnapshot,
-    getServerSnapshot
-  );
+  const { setTheme } = useTheme();
+  // Tema aplicado de verdad (en "auto" next-themes devolvería "auto")
+  const resolvedTheme = useResolvedTheme();
+  const mounted = resolvedTheme !== null;
 
   if (!mounted) {
     return <div className="h-10 w-10 rounded-2xl bg-app-soft" />;

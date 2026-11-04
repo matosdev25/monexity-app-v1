@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "../../../lib/supabase/server";
 import { PLAN_MAP } from "../../../lib/plans/plans";
-import { getPlanAmount } from "../../../lib/paguelofacil";
+import { getPlanAmount } from "../../../lib/billing/plans";
 import { validateDiscountCodeForAmount } from "../../../lib/discounts/validate-discount-code";
 import { formatCurrency } from "../../../lib/currency-format";
 import { StartPagueloFacilCheckout } from "./start-paguelofacil-checkout";
@@ -133,13 +133,13 @@ export default async function CheckoutPage({ searchParams }: Props) {
               Continúa usando Monexity
             </h1>
             <p className="mt-1.5 text-[15px] leading-relaxed text-white/55">
-              Realiza un pago normal con PagueloFácil para continuar con tu plan mensual o anual.
+              Paga con tarjeta mediante Tilopay para continuar con tu plan mensual o anual.
             </p>
 
             <div className="mt-5 space-y-2 rounded-[18px] border border-white/8 bg-white/[0.035] p-4">
               {[
-                "PagueloFácil procesa tu pago de forma segura.",
-                "Monexity confirma el pago.",
+                "Tilopay procesa tu pago de forma segura.",
+                "Monexity confirma el pago directamente con Tilopay.",
                 "Tu acceso se activa para el período pagado.",
               ].map((item, index) => (
                 <div key={item} className="flex items-start gap-3 text-sm text-white/65">
@@ -157,6 +157,14 @@ export default async function CheckoutPage({ searchParams }: Props) {
               billingCycle={billingCycle}
               discountCode={appliedDiscount?.code}
             />
+
+            {/* Alternativa Yappy: el registro manual vive en Facturación (fija el negocio activo). */}
+            <a
+              href={`/api/dashboard/active-company?${new URLSearchParams({ cid, next: "/dashboard/billing" }).toString()}`}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[24px] border border-white/15 bg-white/[0.04] px-5 py-3.5 text-[15px] font-semibold text-white/85 transition-[background-color,border-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-white/[0.08] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 motion-reduce:transition-none"
+            >
+              Pagar por Yappy
+            </a>
 
             <p className="mt-3 text-center text-xs text-white/30">
               No se realizarán cobros automáticos.

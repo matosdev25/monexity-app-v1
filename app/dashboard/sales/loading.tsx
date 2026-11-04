@@ -1,5 +1,5 @@
-import { PageLoader } from "@/components/page-loader";
+import { SalesPageSkeleton } from "@/components/page-skeletons";
 
 export default function SalesLoading() {
-  return <PageLoader />;
+  return <SalesPageSkeleton />;
 }

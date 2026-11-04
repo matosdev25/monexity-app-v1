@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MonexityLogo } from "@/components/monexity-logo";
+import {
+  LEGAL_ENTITY,
+  legalContactChannels,
+  legalField,
+  legalRucDv,
+} from "@/lib/legal/entity";
 
 type LegalSection = {
   title: string;
@@ -76,45 +82,104 @@ const LEGAL_DOCUMENTS: Record<string, LegalDocument> = {
   },
   privacidad: {
     title: "Política de Privacidad",
-    updatedAt: "12 de junio de 2026",
+    updatedAt: "1 de noviembre de 2026",
     intro:
-      "Esta política explica cómo MONEXITY trata datos personales y datos del negocio conforme a la normativa aplicable en Panamá.",
+      "Esta política explica cómo MONEXITY trata los datos personales de sus usuarios y los datos que cada negocio registra en la plataforma, conforme a la Ley 81 de 2019 de Protección de Datos Personales de la República de Panamá y su reglamentación.",
     sections: [
       {
-        title: "Datos que podemos tratar",
+        title: "Responsable del tratamiento y contacto",
         items: [
-          "Datos de cuenta, como nombre, correo electrónico, teléfono si aplica, credenciales y datos de perfil.",
-          "Datos del negocio, como nombre comercial, ventas, gastos, cotizaciones, productos, servicios, inventario, equipo y preferencias operativas.",
-          "Datos necesarios para procesar, registrar o verificar pagos, incluyendo referencias de pago, método usado, estado de pago y datos de confirmación.",
+          `Responsable: ${legalField(LEGAL_ENTITY.legalName)}, a través del establecimiento ${legalField(LEGAL_ENTITY.establishmentName)}, operador del servicio ${LEGAL_ENTITY.tradeName}. RUC: ${legalRucDv()}. Domicilio: ${legalField(LEGAL_ENTITY.address)}, ${LEGAL_ENTITY.country}.`,
+          `Canal de contacto para privacidad y soporte: ${legalContactChannels()}.`,
+          "Cuando un negocio registra en MONEXITY datos de sus propios clientes o colaboradores, ese negocio decide qué datos ingresa y para qué los usa; MONEXITY los trata por cuenta del negocio para prestarle el servicio.",
+        ],
+      },
+      {
+        title: "Datos que tratamos",
+        items: [
+          "Datos de cuenta: nombre completo, nombre de usuario, correo electrónico, número de teléfono y contraseña. La contraseña se gestiona mediante el servicio de autenticación y no se guarda en texto legible en nuestra base de datos.",
+          "Datos del negocio: nombre, logo, datos para facturas (RUC, DV, dirección, correo y teléfono del negocio), métodos de pago configurados y preferencias del panel.",
+          "Datos operativos: ventas, abonos y cuotas, gastos y sus comprobantes adjuntos, cotizaciones, productos, servicios, inventario y cierres de período.",
+          "Datos de terceros que registra el negocio: clientes (nombre, empresa, correo, teléfono, RUC y DV) y miembros del equipo e invitaciones (correo y rol).",
+          "Datos de suscripción y pagos: plan, estado, fechas, montos y referencias de pago. En pagos por Yappy, el nombre y teléfono del remitente que indicas. En pagos con tarjeta, los datos de la tarjeta los ingresas directamente en la página de PagueloFácil y MONEXITY no los recibe ni los almacena; de PagueloFácil solo recibimos el resultado y la referencia del cobro.",
+          "Registro de aceptación legal: versiones de los Términos de uso y de esta Política aceptadas, y la fecha y hora de cada aceptación.",
+          "Datos técnicos: cookies necesarias para la sesión y para recordar el negocio activo, y preferencias guardadas en tu navegador (tema y vista del panel). MONEXITY no usa herramientas de analítica ni de publicidad.",
         ],
       },
       {
         title: "Finalidades",
         items: [
-          "Usamos la información para operar MONEXITY, autenticar usuarios, mantener seguridad, brindar soporte, facturar, verificar pagos y mejorar la plataforma.",
-          "También podemos usar datos técnicos para prevenir fraude, diagnosticar errores, mantener continuidad del servicio y cumplir obligaciones aplicables.",
+          "Prestar el servicio: registrar y mostrar la información del negocio, generar resúmenes y documentos PDF que tú decides descargar o compartir.",
+          "Autenticar usuarios, mantener la seguridad de las cuentas y separar la información de cada negocio según roles.",
+          "Gestionar el equipo: enviar invitaciones por correo y administrar permisos.",
+          "Gestionar la suscripción: procesar, verificar y registrar pagos, y avisar sobre su estado.",
+          "Brindar soporte y atender solicitudes, y conservar el registro de aceptación de los documentos legales.",
+          "Cumplir obligaciones legales, contables y fiscales, y atender reclamos o disputas.",
+          "No vendemos datos personales, no los usamos para publicidad y no enviamos comunicaciones de marketing.",
         ],
       },
       {
-        title: "Proveedores y servicios terceros",
+        title: "Proveedores que tratan datos por cuenta de MONEXITY",
         items: [
-          "MONEXITY puede apoyarse en servicios terceros como Supabase, proveedores de hosting, correo electrónico, analítica o pasarelas de pago.",
-          "Estos proveedores pueden procesar datos únicamente en la medida necesaria para prestar sus servicios a MONEXITY.",
+          "Supabase: base de datos, autenticación de usuarios y almacenamiento de archivos (logos, comprobantes de gastos y PDFs compartidos).",
+          "Vercel: alojamiento y ejecución de la aplicación web.",
+          "Resend: envío de correos transaccionales, como invitaciones al equipo y avisos de pago.",
+          "PagueloFácil: procesamiento de pagos de la suscripción con tarjeta.",
+          "Yappy: cuando pagas tu suscripción por Yappy, el pago se realiza en esa aplicación; MONEXITY solo recibe los datos que reportas para verificarlo.",
+          "WhatsApp: solo si nos escribes por ese canal o decides compartir un documento por WhatsApp desde MONEXITY.",
+          "Estos proveedores tratan los datos únicamente en la medida necesaria para prestar sus servicios a MONEXITY.",
         ],
       },
       {
-        title: "Conservación y seguridad",
+        title: "Transferencias internacionales",
         items: [
-          "Conservamos la información mientras sea necesaria para operar la cuenta, prestar el servicio, atender soporte, cumplir obligaciones o resolver disputas.",
+          "Algunos de los proveedores indicados, como Supabase, Vercel y Resend, y la pasarela de pago PagueloFácil, pueden alojar o procesar datos en servidores ubicados fuera de Panamá.",
+          "Estas transferencias se realizan solo para prestar el servicio descrito en esta política y bajo las condiciones de protección de datos de cada proveedor.",
+        ],
+      },
+      {
+        title: "Conservación de los datos",
+        items: [
+          "Datos de cuenta y del negocio: mientras la cuenta o el negocio permanezcan activos en MONEXITY.",
+          "Si cancelas la membresía, la información del negocio se conserva para que puedas reactivarlo, hasta que el titular solicite su eliminación.",
+          "Registros de pagos y su auditoría: durante el tiempo necesario para cumplir obligaciones contables y fiscales y para atender reclamos; la auditoría de un pago se conserva aunque se elimine la solicitud de pago asociada.",
+          "Registro de aceptación legal: mientras exista la cuenta del usuario.",
+          "Enlaces de documentos compartidos por WhatsApp: el enlace de acceso vence a los 7 días.",
+          "Registro sin confirmar: al registrarte se crean tu cuenta, tu perfil y tu aceptación de los términos (y el negocio, si completas ese paso). Si en 7 días no confirmas tu correo ni inicias sesión, la cuenta y esos datos se eliminan automáticamente. Mientras completas el registro, tu navegador guarda solo un identificador cifrado durante un máximo de 30 minutos.",
+        ],
+      },
+      {
+        title: "Tus derechos",
+        items: [
+          "Acceso: conocer qué datos personales tuyos tratamos y cómo los usamos.",
+          "Rectificación: corregir datos inexactos o incompletos. Muchos datos puedes actualizarlos directamente desde tu cuenta.",
+          "Cancelación: solicitar la eliminación de tus datos cuando ya no sean necesarios, salvo los que debamos conservar por obligación legal, contable o fiscal.",
+          "Oposición: oponerte a un tratamiento concreto de tus datos por motivos legítimos.",
+          "Portabilidad: recibir tus datos en un formato estructurado y de uso común.",
+        ],
+      },
+      {
+        title: "Cómo ejercer tus derechos",
+        items: [
+          `Envía tu solicitud por ${legalContactChannels()}.`,
+          "Incluye tu nombre, el correo de tu cuenta, el derecho que deseas ejercer y una descripción de tu solicitud.",
+          "Antes de responder verificaremos tu identidad, por ejemplo confirmando la solicitud desde el correo registrado en tu cuenta.",
+          "Responderemos dentro de los plazos establecidos por la normativa panameña aplicable.",
+          "Si eres cliente o colaborador de un negocio que usa MONEXITY, puedes dirigir tu solicitud a ese negocio; MONEXITY le dará el apoyo necesario para atenderla.",
+          "Si consideras que no atendimos correctamente tu solicitud, puedes acudir a la Autoridad Nacional de Transparencia y Acceso a la Información (ANTAI).",
+        ],
+      },
+      {
+        title: "Seguridad",
+        items: [
+          "El acceso a la información está separado por negocio y limitado según el rol de cada usuario.",
           "Aplicamos medidas razonables de seguridad, pero ningún sistema conectado a internet puede garantizar seguridad absoluta.",
         ],
       },
       {
-        title: "Derechos del usuario",
+        title: "Cambios en esta política",
         items: [
-          "El usuario puede solicitar acceso, corrección, actualización o eliminación de sus datos cuando corresponda según la normativa aplicable.",
-          "Algunas solicitudes pueden requerir verificación de identidad y pueden estar sujetas a obligaciones legales, fiscales, operativas o de seguridad.",
-          "Para solicitudes de privacidad, contacta a MONEXITY por los canales publicados en la plataforma.",
+          "Cuando actualicemos esta política publicaremos la nueva versión con su fecha y te pediremos aceptarla al volver a ingresar a MONEXITY.",
         ],
       },
     ],
@@ -136,13 +201,6 @@ const LEGAL_DOCUMENTS: Record<string, LegalDocument> = {
         title: "Preferencias y experiencia",
         items: [
           "Podemos usar cookies o almacenamiento local para recordar preferencias de interfaz, sesión activa, empresa seleccionada u opciones necesarias para mejorar la experiencia.",
-        ],
-      },
-      {
-        title: "Analítica",
-        items: [
-          "MONEXITY puede usar analítica propia o de terceros en el futuro para entender uso general de la plataforma y mejorar el producto.",
-          "Si se habilitan herramientas no esenciales, se procurará informar al usuario según corresponda.",
         ],
       },
       {
@@ -195,10 +253,23 @@ const LEGAL_DOCUMENTS: Record<string, LegalDocument> = {
   },
   "aviso-legal": {
     title: "Aviso Legal / Descargo de Responsabilidad",
-    updatedAt: "12 de junio de 2026",
+    updatedAt: "31 de octubre de 2026",
     intro:
-      "Este aviso aclara el alcance de MONEXITY como herramienta de organización y control de información de negocio.",
+      "Este aviso identifica al operador de MONEXITY y aclara el alcance del servicio como herramienta de organización y control de información de negocio.",
     sections: [
+      {
+        title: "Identificación del operador",
+        items: [
+          `Nombre comercial: ${LEGAL_ENTITY.tradeName}.`,
+          `Titular: ${legalField(LEGAL_ENTITY.legalName)}.`,
+          `Establecimiento comercial: ${legalField(LEGAL_ENTITY.establishmentName)}.`,
+          `RUC: ${legalRucDv()}.`,
+          `Domicilio: ${legalField(LEGAL_ENTITY.address)}, ${LEGAL_ENTITY.country}.`,
+          `Correo de soporte: ${legalField(LEGAL_ENTITY.supportEmail)}.`,
+          `WhatsApp de soporte: ${LEGAL_ENTITY.whatsappDisplay}.`,
+          `Aviso de Operación: ${legalField(LEGAL_ENTITY.operationNoticeNumber)}.`,
+        ],
+      },
       {
         title: "Alcance del servicio",
         items: [
@@ -235,12 +306,18 @@ export function generateStaticParams() {
   return Object.keys(LEGAL_DOCUMENTS).map((slug) => ({ slug }));
 }
 
-export function generateMetadata({
-  params,
-}: {
-  params: { slug: string };
-}): Metadata {
-  const document = LEGAL_DOCUMENTS[params.slug];
+type LegalPageProps = {
+  params: Promise<{ slug: string }>;
+};
+
+// Solo claves propias: evita que slugs como "constructor" resuelvan propiedades heredadas
+function getLegalDocument(slug: string): LegalDocument | undefined {
+  return Object.hasOwn(LEGAL_DOCUMENTS, slug) ? LEGAL_DOCUMENTS[slug] : undefined;
+}
+
+export async function generateMetadata({ params }: LegalPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const document = getLegalDocument(slug);
 
   if (!document) {
     return { title: "Legal" };
@@ -252,12 +329,9 @@ export function generateMetadata({
   };
 }
 
-export default function LegalPage({
-  params,
-}: {
-  params: { slug: string };
-}) {
-  const document = LEGAL_DOCUMENTS[params.slug];
+export default async function LegalPage({ params }: LegalPageProps) {
+  const { slug } = await params;
+  const document = getLegalDocument(slug);
 
   if (!document) notFound();
 

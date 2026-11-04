@@ -5,6 +5,7 @@ import { formatCurrency } from "@/lib/currency-format";
 import { toggleDiscountCode } from "../actions";
 import { DiscountCodeForm } from "./discount-code-form";
 import { DeleteDiscountCodeButton } from "./delete-discount-code-button";
+import { AdminEmptyState, AdminErrorState } from "../admin-ui";
 
 export const metadata = { title: "Admin — Códigos de descuento" };
 export const dynamic = "force-dynamic";
@@ -55,6 +56,7 @@ export default async function AdminDiscountCodesPage() {
 
   const codes = (data ?? []) as DiscountCode[];
   const isMissingTable = error?.code === "PGRST205" || error?.code === "42P01";
+  const hasLoadError = Boolean(error) && !isMissingTable;
 
   return (
     <div className="space-y-5">
@@ -70,17 +72,30 @@ export default async function AdminDiscountCodesPage() {
         </section>
       )}
 
+      {hasLoadError ? (
+        <AdminErrorState message="No se pudieron consultar los códigos. Recarga la página para intentarlo de nuevo." />
+      ) : null}
+
       <section className="app-card overflow-hidden rounded-[28px]">
         <div className="border-b border-app px-4 py-3 text-sm font-semibold text-app">
           {codes.length} código(s)
         </div>
 
+        {codes.length === 0 && !error ? (
+          <div className="p-4">
+            <AdminEmptyState
+              title="Aún no hay códigos de descuento"
+              description="Crea el primero con el formulario de arriba."
+            />
+          </div>
+        ) : null}
+
         <div className="divide-y divide-[var(--border-soft)]">
           {codes.map((code) => (
-            <div key={code.id} className="grid gap-3 px-4 py-4 lg:grid-cols-[1.1fr_0.8fr_1fr_auto] lg:items-center">
-              <div>
+            <div key={code.id} className="grid min-w-0 gap-3 px-4 py-4 lg:grid-cols-[1.1fr_0.8fr_1fr_auto] lg:items-center">
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-mono text-sm font-semibold tracking-[0.12em] text-app">{code.code}</p>
+                  <p className="break-all font-mono text-sm font-semibold tracking-[0.12em] text-app">{code.code}</p>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${code.is_active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" : "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300"}`}>
                     {code.is_active ? "Activo" : "Inactivo"}
                   </span>

@@ -1,7 +1,9 @@
 "use client";
 
-import { Fragment, useActionState, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
+import { Fragment, useActionState, useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal, useFormStatus } from "react-dom";
+import Link from "next/link";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import { createSale } from "./actions";
 import type { SalePaymentMethodOption } from "./types";
 import { ButtonSpinner } from "@/components/button-spinner";
@@ -29,7 +31,90 @@ type ActionState = {
   success: boolean;
   message: string;
   timestamp?: number;
+  code?: "ACCOUNT_INACTIVE";
+  canManageBilling?: boolean;
 };
+
+const dialogMotion =
+  "transition-[background-color,border-color,color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none";
+
+// Popup cuando el servidor rechaza la venta porque la cuenta no tiene acceso activo
+// Solo el owner ve el CTA a Facturación (el layout bloquea esa ruta a admin/seller).
+function AccountInactiveDialog({
+  open,
+  canManageBilling,
+  onClose,
+}: {
+  open: boolean;
+  canManageBilling: boolean;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const panelRef = useModalAccessibility({ open, onClose });
+
+  useEffect(() => {
+    if (!open) return;
+    return lockBodyScroll();
+  }, [open]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[1002]">
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Cerrar"
+        className="animate-mx-fade-in absolute inset-0 bg-slate-950/45 dark:bg-black/60"
+        onClick={onClose}
+      />
+      <div className="absolute inset-0 overflow-y-auto overscroll-contain p-4">
+        <div className="flex min-h-full items-center justify-center">
+          <div
+            ref={panelRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={descriptionId}
+            className="animate-mx-scale-in relative my-4 w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-5 outline-none shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+          >
+            <p className="text-[11px] uppercase tracking-[0.18em] text-amber-600 dark:text-amber-400">
+              Membresía
+            </p>
+            <h3 id={titleId} className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+              Tu cuenta está inactiva
+            </h3>
+            <p id={descriptionId} className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              {canManageBilling
+                ? "No se registró la venta. Para seguir registrando ventas, activa o renueva tu plan en facturación."
+                : "No se registró la venta. Contacta al dueño del negocio para que active o renueve el plan."}
+            </p>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
+              {canManageBilling ? (
+                <Link
+                  href="/dashboard/billing"
+                  onClick={onClose}
+                  className={`inline-flex w-full items-center justify-center rounded-[18px] bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white ${dialogMotion} hover:bg-sky-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 sm:w-auto dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400`}
+                >
+                  Ir a facturación
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                onClick={onClose}
+                className={`inline-flex w-full items-center justify-center rounded-[18px] border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 ${dialogMotion} hover:border-slate-300 hover:text-slate-900 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:w-auto dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100 dark:focus-visible:ring-white/20`}
+              >
+                {canManageBilling ? "Ahora no" : "Entendido"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 const initialState: ActionState = {
   success: false,
@@ -88,6 +173,15 @@ function getCurrentDateTimeLocal() {
 const inputClass =
   "h-10 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[15px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-400 dark:focus:ring-cyan-500/10";
 
+const motionClass =
+  "transition-[background-color,border-color,color,box-shadow] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none";
+
+const MANUAL_SERVICE_NAME_MAX = 120;
+
+function createManualLineItemUid() {
+  return `manual-${Date.now()}`;
+}
+
 function SubmitButton({
   success,
   disabled,
@@ -141,10 +235,18 @@ export function CreateSaleForm({
 }: CreateSaleFormProps) {
   const [state, formAction] = useActionState(createSale, initialState);
   const [showSuccess, setShowSuccess] = useState(false);
+  // El popup se abre por cada rechazo ACCOUNT_INACTIVE (timestamp nuevo) hasta cerrarlo
+  const [dismissedInactiveAt, setDismissedInactiveAt] = useState<number | null>(null);
+  const isAccountInactive = !state.success && state.code === "ACCOUNT_INACTIVE";
+  const showInactiveDialog = isAccountInactive && (state.timestamp ?? 0) !== dismissedInactiveAt;
 
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [showServicePicker, setShowServicePicker] = useState(false);
+  const [showManualService, setShowManualService] = useState(false);
+  const [manualServiceName, setManualServiceName] = useState("");
+  const [manualServicePrice, setManualServicePrice] = useState("");
+  const [manualServiceError, setManualServiceError] = useState("");
   const [rawAmount, setRawAmount] = useState("");
   const [rawDiscount, setRawDiscount] = useState("");
   const [rawPaidAmount, setRawPaidAmount] = useState("");
@@ -267,11 +369,50 @@ export function CreateSaleForm({
 
   const syncLineItems = useCallback((items: LineItem[]) => {
     setLineItems(items);
-    if (items.length === 0) return;
+    if (items.length === 0) {
+      // Evita que el ítem eliminado se guarde por los campos fallback (monto/detalle)
+      setRawAmount("");
+      setNote("");
+      return;
+    }
     const total = roundMoney(items.reduce((s, i) => s + i.qty * i.unitPrice, 0));
     setRawAmount(String(total));
     setNote(items.map((i) => i.name).join(", "));
   }, []);
+
+  const closeManualService = useCallback(() => {
+    setShowManualService(false);
+    setManualServiceName("");
+    setManualServicePrice("");
+    setManualServiceError("");
+  }, []);
+
+  const handleAddManualService = useCallback(() => {
+    const name = manualServiceName.trim();
+    const price = parseMoney(manualServicePrice);
+    if (!name) {
+      setManualServiceError("Escribe el nombre del servicio.");
+      return;
+    }
+    if (price <= 0) {
+      setManualServiceError("Ingresa un monto mayor a 0.");
+      return;
+    }
+    // Solo forma parte de esta venta; no se guarda en company_services.
+    syncLineItems([
+      ...lineItems,
+      {
+        uid: createManualLineItemUid(),
+        productId: "",
+        name: name.slice(0, MANUAL_SERVICE_NAME_MAX),
+        qty: 1,
+        unitPrice: roundMoney(price),
+        trackInventory: false,
+        availableStock: 0,
+      },
+    ]);
+    closeManualService();
+  }, [manualServiceName, manualServicePrice, lineItems, syncLineItems, closeManualService]);
 
   const handlePaymentTypeChange = useCallback((nextPaymentType: string) => {
     setPaymentType(nextPaymentType);
@@ -292,6 +433,7 @@ export function CreateSaleForm({
   const hasProducts = (products ?? []).length > 0;
   const hasServices = (services ?? []).length > 0;
   const hasLineItems = lineItems.length > 0;
+  const catalogButtonsCount = Number(hasProducts) + Number(hasServices);
 
   // Success reset
   useEffect(() => {
@@ -300,6 +442,7 @@ export function CreateSaleForm({
       const resetTimer = window.setTimeout(() => {
         setShowSuccess(true);
         setLineItems([]);
+        closeManualService();
         setRawAmount("");
         setRawDiscount("");
         setRawPaidAmount("");
@@ -325,7 +468,7 @@ export function CreateSaleForm({
     }
     const timer = window.setTimeout(() => setShowSuccess(false), 0);
     return () => window.clearTimeout(timer);
-  }, [state?.success, state?.timestamp, onSuccess, today]);
+  }, [state?.success, state?.timestamp, onSuccess, today, closeManualService]);
 
   return (
     <>
@@ -337,9 +480,8 @@ export function CreateSaleForm({
           if (clientError) e.preventDefault();
         }}
       >
-        {/* Line items — productos y/o servicios */}
-        {(hasProducts || hasServices) ? (
-          <div className="space-y-2">
+        {/* Line items — productos, servicios del catálogo y servicios manuales */}
+        <div className="space-y-2">
             {lineItems.length > 0 ? (
               <div className="space-y-1.5">
                 {lineItems.map((item) => (
@@ -371,7 +513,7 @@ export function CreateSaleForm({
                 ))}
               </div>
             ) : null}
-            <div className={hasProducts && hasServices ? "grid grid-cols-2 gap-2" : ""}>
+            <div className="grid grid-cols-2 gap-2">
               {hasProducts && (
                 <button
                   type="button"
@@ -392,9 +534,100 @@ export function CreateSaleForm({
                   <span>Servicio</span>
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => (showManualService ? closeManualService() : setShowManualService(true))}
+                aria-expanded={showManualService}
+                aria-controls="manual-service-panel"
+                className={`${
+                  catalogButtonsCount === 1 ? "" : "col-span-2"
+                } flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-violet-300 bg-violet-50/60 px-4 py-2.5 text-sm font-medium text-violet-700 ${motionClass} hover:bg-violet-50 active:bg-violet-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 dark:border-violet-700 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/30 dark:active:bg-violet-900/40 dark:focus-visible:ring-violet-500/30`}
+              >
+                <span className="text-base leading-none">+</span>
+                <span>Servicio manual</span>
+              </button>
             </div>
+            {showManualService ? (
+              <div
+                id="manual-service-panel"
+                className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/60"
+              >
+                <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2">
+                  <div className="min-w-0 space-y-1">
+                    <label
+                      htmlFor="manualServiceName"
+                      className="block text-sm font-medium text-slate-500 dark:text-slate-300"
+                    >
+                      Servicio
+                    </label>
+                    <input
+                      id="manualServiceName"
+                      type="text"
+                      maxLength={MANUAL_SERVICE_NAME_MAX}
+                      placeholder="Nombre del servicio"
+                      value={manualServiceName}
+                      onChange={(e) => {
+                        setManualServiceName(e.target.value);
+                        setManualServiceError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddManualService();
+                        }
+                      }}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <label
+                      htmlFor="manualServicePrice"
+                      className="block text-sm font-medium text-slate-500 dark:text-slate-300"
+                    >
+                      Monto
+                    </label>
+                    <input
+                      id="manualServicePrice"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="$ 0.00"
+                      value={formatAmountInput(manualServicePrice)}
+                      onChange={(e) => {
+                        setManualServicePrice(normalizeAmountInput(e.target.value));
+                        setManualServiceError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddManualService();
+                        }
+                      }}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+                {manualServiceError ? (
+                  <p className="text-xs text-rose-500 dark:text-rose-300">{manualServiceError}</p>
+                ) : null}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={closeManualService}
+                    className={`h-10 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 ${motionClass} hover:bg-slate-100 active:bg-slate-200/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-100 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-300 dark:hover:bg-slate-800 dark:active:bg-slate-700 dark:focus-visible:ring-cyan-500/10`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddManualService}
+                    className={`h-10 rounded-2xl bg-sky-600 px-4 text-sm font-medium text-white ${motionClass} hover:bg-sky-700 active:bg-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400 dark:active:bg-cyan-300 dark:focus-visible:ring-cyan-500/30`}
+                  >
+                    Agregar
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
 
         {/* Hidden fields always included */}
         <input type="hidden" name="paymentDate" value={saleDateTime.slice(0, 10)} />
@@ -469,6 +702,45 @@ export function CreateSaleForm({
               name="customerCompany"
               type="text"
               placeholder="Empresa del cliente"
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        {/* Customer RUC + DV */}
+        <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2 sm:grid-cols-2">
+          <div className="min-w-0 space-y-1">
+            <label
+              htmlFor="customerRuc"
+              className="block text-sm font-medium text-slate-500 dark:text-slate-300"
+            >
+              RUC (opcional)
+            </label>
+            <input
+              id="customerRuc"
+              name="customerRuc"
+              type="text"
+              maxLength={40}
+              autoComplete="off"
+              placeholder="RUC del cliente"
+              className={inputClass}
+            />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <label
+              htmlFor="customerDv"
+              className="block text-sm font-medium text-slate-500 dark:text-slate-300"
+            >
+              DV
+            </label>
+            <input
+              id="customerDv"
+              name="customerDv"
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              autoComplete="off"
+              placeholder="00"
               className={inputClass}
             />
           </div>
@@ -745,10 +1017,16 @@ export function CreateSaleForm({
           <p className="text-xs text-rose-500 dark:text-rose-300">{clientError}</p>
         ) : null}
 
-        {!state.success && state.message ? (
+        {!state.success && state.message && !isAccountInactive ? (
           <p className="text-xs text-rose-500 dark:text-rose-300">{state.message}</p>
         ) : null}
       </form>
+
+      <AccountInactiveDialog
+        open={showInactiveDialog}
+        canManageBilling={state.canManageBilling === true}
+        onClose={() => setDismissedInactiveAt(state.timestamp ?? 0)}
+      />
 
       {isInstallment && showPlanModal && (
         <InstallmentPlanModal

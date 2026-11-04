@@ -11,6 +11,8 @@ import { logout } from "@/app/auth/logout/actions";
 import { resolveLogoUrl } from "../../lib/storage/resolve-logo";
 import { isGlobalAdminEmail } from "../../lib/admin-auth";
 import { canAccessCompanyApp } from "../../lib/memberships/app-access";
+import { hasAcceptedCurrentLegalVersions } from "../../lib/legal/acceptance-status";
+import { LegalAcceptanceGate } from "./legal-acceptance-gate";
 
 export type CompanyOption = {
   companyId: string;
@@ -143,6 +145,13 @@ export default async function DashboardLayout({
 
   if (!user) {
     redirect("/auth/login");
+  }
+
+  // Aceptación legal obligatoria de las versiones vigentes antes de usar Monexity.
+  // Sin aceptación (o si la consulta falla) no se monta el dashboard ni su navegación.
+  const hasAcceptedLegal = await hasAcceptedCurrentLegalVersions(supabase, user.id);
+  if (!hasAcceptedLegal) {
+    return <LegalAcceptanceGate />;
   }
 
   const { data: membershipsRaw, error: membershipsError } = await supabase

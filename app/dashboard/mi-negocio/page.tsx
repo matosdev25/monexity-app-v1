@@ -23,6 +23,7 @@ import {
   changeMemberRole,
 } from "../team/actions";
 import { ConfirmSubmitButton } from "../../../components/confirm-submit-button";
+import { FormSubmitButton } from "../../../components/submit-button";
 import { InviteCodeDisplay } from "../team/invite-code-display";
 import { PLAN_MAP } from "../../../lib/plans/plans";
 
@@ -320,7 +321,7 @@ export default async function MiNegocioPage({
         .from("payment_intents")
         .select("status, provider, plan_id, billing_cycle, exact_amount, verified_at, created_at")
         .eq("company_id", membership.company_id)
-        .in("provider", ["paguelofacil", "yappy_manual"])
+        .in("provider", ["paguelofacil", "tilopay", "yappy_manual"])
         .eq("status", "paid")
         .order("verified_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
@@ -472,12 +473,12 @@ export default async function MiNegocioPage({
                             name="newRole"
                             value={member.role === "admin" ? "seller" : "admin"}
                           />
-                          <button
-                            type="submit"
+                          <FormSubmitButton
+                            pendingText="Actualizando..."
                             className="w-full rounded-xl border border-app bg-app-soft px-3 py-1.5 text-xs font-medium text-app-muted transition hover:text-app"
                           >
                             {member.role === "admin" ? "Hacer vendedor" : "Hacer administrador"}
-                          </button>
+                          </FormSubmitButton>
                         </form>
 
                         <form action={removeMember} className="flex-1">
@@ -485,6 +486,7 @@ export default async function MiNegocioPage({
                           <input type="hidden" name="companyId" value={membership.company_id} />
                           <ConfirmSubmitButton
                             label="Eliminar"
+                            pendingLabel="Eliminando..."
                             title="Eliminar miembro"
                             confirmMessage="¿Seguro que deseas quitar este miembro del equipo?"
                             confirmLabel="Sí, eliminar"
@@ -562,12 +564,12 @@ export default async function MiNegocioPage({
                   </div>
 
                   <div className="flex justify-end">
-                    <button
-                      type="submit"
+                    <FormSubmitButton
+                      pendingText="Creando..."
                       className="rounded-[14px] bg-sky-600 px-4 py-2 text-sm font-medium text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-700 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
                     >
                       Crear invitación
-                    </button>
+                    </FormSubmitButton>
                   </div>
                 </div>
               </form>
@@ -619,24 +621,24 @@ export default async function MiNegocioPage({
                         <form action={resendInviteEmail}>
                           <input type="hidden" name="inviteId" value={invite.id} />
                           <input type="hidden" name="companyId" value={membership.company_id} />
-                          <button
-                            type="submit"
+                          <FormSubmitButton
+                            pendingText="Enviando..."
                             className="rounded-xl border border-app bg-app-soft px-3 py-1.5 text-xs font-medium text-app-muted transition hover:text-app"
                           >
                             Reenviar correo
-                          </button>
+                          </FormSubmitButton>
                         </form>
                       )}
 
                       <form action={regenerateInvite}>
                         <input type="hidden" name="inviteId" value={invite.id} />
                         <input type="hidden" name="companyId" value={membership.company_id} />
-                        <button
-                          type="submit"
+                        <FormSubmitButton
+                          pendingText="Regenerando..."
                           className="rounded-xl border border-app bg-app-soft px-3 py-1.5 text-xs font-medium text-app-muted transition hover:text-app"
                         >
                           Regenerar
-                        </button>
+                        </FormSubmitButton>
                       </form>
 
                       <form action={cancelInvite}>
@@ -644,6 +646,7 @@ export default async function MiNegocioPage({
                         <input type="hidden" name="companyId" value={membership.company_id} />
                         <ConfirmSubmitButton
                           label="Cancelar"
+                          pendingLabel="Cancelando..."
                           title="Cancelar invitación"
                           confirmMessage="¿Seguro que quieres cancelar esta invitación? Ya no podrá ser usada."
                           confirmLabel="Sí, cancelar"

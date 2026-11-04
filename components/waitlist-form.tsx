@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { LEGAL_ENTITY } from "@/lib/legal/entity";
 
 type Method = "email" | "whatsapp";
 type State = "idle" | "loading" | "success" | "error";
 
-const WA_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "50760000000";
+const WA_NUMBER = LEGAL_ENTITY.whatsappNumber;
 const WA_MSG = encodeURIComponent(
   "Hola, quiero unirme a la lista de espera de Monexity 🎉"
 );

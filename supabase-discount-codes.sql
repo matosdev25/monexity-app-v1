@@ -88,4 +88,8 @@ BEGIN
 END;
 $$;
 
+-- Solo service_role (aprobación admin y retorno server-side).
+REVOKE EXECUTE ON FUNCTION increment_discount_code_usage(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION increment_discount_code_usage(uuid) TO service_role;
+
 DROP FUNCTION IF EXISTS activate_subscription_with_promo(uuid, uuid, text, text, uuid);

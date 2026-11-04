@@ -1,0 +1,12 @@
+{
+  "enabledMcpjsonServers": [
+    "supabase"
+  ],
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:tilopay.com)",
+      "WebFetch(domain:app.tilopay.com)",
+      "WebFetch(domain:documenter.getpostman.com)"
+    ]
+  }
+}
