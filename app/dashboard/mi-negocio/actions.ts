@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
+import { createAdminClient } from "../../../lib/supabase/admin";
 import { PLAN_MAP } from "../../../lib/plans/plans";
 import type { CompanyPaymentMethod, UpdateBusinessState } from "./types";
 
@@ -247,7 +248,10 @@ export async function cancelMembership(
     return { success: false, error: "No tienes permisos para cancelar esta membresía." };
   }
 
-  const { data: updatedCompany, error: updateError } = await supabase
+  // Campos de suscripción protegidos por privilegios de columna: solo service_role.
+  const admin = createAdminClient();
+
+  const { data: updatedCompany, error: updateError } = await admin
     .from("companies")
     .update({
       subscription_cancel_at_period_end: true,

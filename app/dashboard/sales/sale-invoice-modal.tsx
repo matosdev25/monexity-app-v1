@@ -3,13 +3,16 @@
 import React, {
   useDeferredValue,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import type { Sale, SaleItem } from "./types";
 import { fetchSaleItems, fetchSalePlan, type SalePlanSummary } from "./actions";
+import { ButtonSpinner } from "@/components/button-spinner";
 import { createClient } from "../../../lib/supabase/client";
 import { formatLongDate, formatTime } from "../../../lib/date-format";
 import { formatCurrency } from "../../../lib/currency-format";
@@ -100,6 +103,11 @@ function fmtDateTime(saleDate: string | null | undefined, createdAt: string | nu
   const time = formatTime(createdAt, "");
   return time ? `${date} · ${time}` : date;
 }
+function formatCustomerTaxId(sale: Pick<Sale, "customer_ruc" | "customer_dv">) {
+  const ruc = sale.customer_ruc?.trim();
+  const dv = sale.customer_dv?.trim();
+  return [ruc ? `RUC ${ruc}` : "", dv ? `DV ${dv}` : ""].filter(Boolean).join(" · ");
+}
 function normalizePhone(raw: string) {
   const d = raw.replace(/\D/g, "");
   return d.length === 8 ? `507${d}` : d;
@@ -115,6 +123,7 @@ type PdfData = {
   dateTimeStr: string;
   customerName: string;
   customerCompany?: string | null;
+  customerTaxId?: string;
   methodStr: string;
   typeStr: string;
   statusStr: string;
@@ -242,7 +251,21 @@ async function generatePdfBlob(data: PdfData): Promise<Blob> {
 
   // ── Cliente + Detalles (2 columns) ──────────────────────────────────────────
   const col = (CW - 5) / 2;
-  const boxH = 24;
+
+  // Medir líneas del cliente antes de dibujar para ajustar la altura de la caja
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  const cLines: string[] = doc.splitTextToSize(data.customerName || "Consumidor final", col - 8);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  const companyLines: string[] = data.customerCompany
+    ? doc.splitTextToSize(data.customerCompany, col - 8)
+    : [];
+  const taxLines: string[] = data.customerTaxId
+    ? doc.splitTextToSize(data.customerTaxId, col - 8)
+    : [];
+  const clientContentH = 10 + cLines.length * 4.5 + (companyLines.length + taxLines.length) * 4;
+  const boxH = Math.max(24, clientContentH + 1.5);
 
   doc.setFillColor(250, 252, 255);
   doc.setDrawColor(226, 232, 240);
@@ -254,13 +277,16 @@ async function generatePdfBlob(data: PdfData): Promise<Blob> {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   dark();
-  const cLines: string[] = doc.splitTextToSize(data.customerName || "Consumidor final", col - 8);
   doc.text(cLines, M + 4, y + 10);
-  if (data.customerCompany) {
+  let cy = y + 10 + cLines.length * 4.5;
+  if (companyLines.length > 0 || taxLines.length > 0) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     soft();
-    doc.text(data.customerCompany, M + 4, y + 10 + cLines.length * 4.5, { maxWidth: col - 8 });
+    for (const line of [...companyLines, ...taxLines]) {
+      doc.text(line, M + 4, cy);
+      cy += 4;
+    }
   }
 
   const d2x = M + col + 5;
@@ -490,6 +516,9 @@ const InvoicePreview = React.memo(
             {sale.customer_company ? (
               <p className="text-xs text-slate-500">{sale.customer_company}</p>
             ) : null}
+            {formatCustomerTaxId(sale) ? (
+              <p className="text-xs text-slate-500">{formatCustomerTaxId(sale)}</p>
+            ) : null}
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
@@ -712,6 +741,9 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
   const [customerName, setCustomerName] = useState(
     sale.customer_name?.trim() || "Consumidor final"
   );
+  // Ítems y plan deben cargar antes de previsualizar o exportar la factura
+  const [dataStatus, setDataStatus] = useState<"loading" | "ready" | "error">("loading");
+  const dataRequestRef = useRef(0);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [processing, setProcessing] = useState<"pdf" | "wa" | null>(null);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
@@ -775,25 +807,37 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
     };
   }, [open]);
 
-  // Lock body scroll while open
+  // Bloqueo de scroll compartido (la factura puede abrirse sobre otro modal)
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    return lockBodyScroll();
   }, [open]);
 
   const openModal = () => {
     setReady(false);
     setPdfError(null);
     setOpen(true);
-    fetchSaleItems(sale.id).then(setSaleItems).catch(() => {});
-    if (sale.has_payment_plan) {
-      fetchSalePlan(sale.id).then(setPlanSummary).catch(() => {});
-    }
+    setDataStatus("loading");
+    const requestId = ++dataRequestRef.current;
+    Promise.all([
+      fetchSaleItems(sale.id),
+      sale.has_payment_plan ? fetchSalePlan(sale.id) : Promise.resolve(null),
+    ])
+      .then(([items, plan]) => {
+        if (requestId !== dataRequestRef.current) return;
+        setSaleItems(items);
+        setPlanSummary(plan);
+        setDataStatus("ready");
+      })
+      .catch(() => {
+        if (requestId !== dataRequestRef.current) return;
+        setDataStatus("error");
+      });
   };
 
   const closeModal = () => {
+    dataRequestRef.current += 1;
+    setDataStatus("loading");
     setReady(false);
     setOpen(false);
     setSaleItems([]);
@@ -801,6 +845,16 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
     setPdfError(null);
     pendingBlobRef.current = null;
   };
+
+  // Foco, Tab confinado, Escape (solo el diálogo superior) y retorno de foco.
+  // El modal de teléfono se apila encima de la factura.
+  const invoicePanelRef = useModalAccessibility({ open, onClose: closeModal });
+  const phonePanelRef = useModalAccessibility({
+    open: showPhoneModal,
+    onClose: () => setShowPhoneModal(false),
+    closeOnEscape: !processing,
+  });
+  const phoneTitleId = useId();
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   const invoiceLabel = () =>
@@ -865,6 +919,7 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
     dateTimeStr:         fmtDateTime(sale.sale_date, sale.created_at),
     customerName:        deferredName,
     customerCompany:     sale.customer_company,
+    customerTaxId:       formatCustomerTaxId(sale),
     methodStr:           fmtMethod(invoicePaymentMethod),
     typeStr:             fmtType(sale.payment_type),
     statusStr:           fmtStatus(computed.paymentStatus),
@@ -886,7 +941,7 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
 
   // ── Export PDF ───────────────────────────────────────────────────────────────
   const handleExportPdf = async () => {
-    if (processing) return;
+    if (processing || dataStatus !== "ready") return;
     setPdfError(null);
     setProcessing("pdf");
     try {
@@ -907,7 +962,7 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
 
   // ── WhatsApp ─────────────────────────────────────────────────────────────────
   const handleWhatsApp = async () => {
-    if (processing) return;
+    if (processing || dataStatus !== "ready") return;
     setPdfError(null);
     setProcessing("wa");
     try {
@@ -967,6 +1022,8 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
   };
 
   const isPending = processing !== null;
+  const isDataReady = dataStatus === "ready";
+  const showPreview = ready && isDataReady;
 
   return (
     <>
@@ -988,8 +1045,14 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
               if (!processing) setShowPhoneModal(false);
             }}
           />
-          <div className="relative w-full max-w-95 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.16)] dark:border-slate-800 dark:bg-slate-900">
-            <h4 className="text-base font-semibold text-slate-950 dark:text-slate-50">
+          <div
+            ref={phonePanelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={phoneTitleId}
+            className="relative w-full max-w-95 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.16)] outline-none dark:border-slate-800 dark:bg-slate-900"
+          >
+            <h4 id={phoneTitleId} className="text-base font-semibold text-slate-950 dark:text-slate-50">
               Número de WhatsApp
             </h4>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -1021,9 +1084,11 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
               <button
                 type="button"
                 disabled={!phoneInput.trim() || processing === "wa"}
+                aria-busy={processing === "wa"}
                 onClick={handleSendFromPhoneModal}
-                className="flex-1 rounded-xl border border-green-600 bg-green-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-green-700 disabled:opacity-50 dark:border-green-500 dark:bg-green-500 dark:text-slate-950"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-green-600 bg-green-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-green-700 disabled:opacity-50 dark:border-green-500 dark:bg-green-500 dark:text-slate-950"
               >
+                {processing === "wa" ? <ButtonSpinner variant="current" /> : null}
                 {processing === "wa" ? "Enviando…" : "Enviar"}
               </button>
               <button
@@ -1050,10 +1115,11 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
           />
 
           <div
+            ref={invoicePanelRef}
             aria-modal="true"
             role="dialog"
             aria-labelledby={`inv-title-${sale.id}`}
-            className="relative flex max-h-[90dvh] w-full max-w-295 flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white/95 shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-800 dark:bg-slate-900/95"
+            className="relative flex max-h-[90dvh] w-full max-w-295 flex-col overflow-hidden outline-none rounded-[28px] border border-slate-200 bg-white/95 shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-800 dark:bg-slate-900/95"
           >
             <div
               className={[
@@ -1192,17 +1258,23 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
                     <button
                       type="button"
                       onClick={handleExportPdf}
-                      disabled={isPending}
-                      className="rounded-2xl border border-emerald-200/80 bg-emerald-50/80 px-4 py-2 text-sm font-medium text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
+                      disabled={isPending || !isDataReady}
+                      aria-disabled={isPending || !isDataReady}
+                      aria-busy={processing === "pdf"}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-200/80 bg-emerald-50/80 px-4 py-2 text-sm font-medium text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
                     >
+                      {processing === "pdf" ? <ButtonSpinner variant="current" /> : null}
                       {processing === "pdf" ? "Generando…" : "Exportar PDF"}
                     </button>
                     <button
                       type="button"
                       onClick={handleWhatsApp}
-                      disabled={isPending}
-                      className="rounded-2xl border border-green-200/80 bg-green-50/80 px-4 py-2 text-sm font-medium text-green-700 transition hover:border-green-300 hover:bg-green-100 disabled:opacity-50 dark:border-green-500/20 dark:bg-green-500/10 dark:text-green-300"
+                      disabled={isPending || !isDataReady}
+                      aria-disabled={isPending || !isDataReady}
+                      aria-busy={processing === "wa"}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-green-200/80 bg-green-50/80 px-4 py-2 text-sm font-medium text-green-700 transition hover:border-green-300 hover:bg-green-100 disabled:opacity-50 dark:border-green-500/20 dark:bg-green-500/10 dark:text-green-300"
                     >
+                      {processing === "wa" ? <ButtonSpinner variant="current" /> : null}
                       {processing === "wa" ? "Preparando…" : "WhatsApp"}
                     </button>
                     <button
@@ -1216,8 +1288,20 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
                 </div>
 
                 {/* Invoice preview */}
-                <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/50">
-                  {ready ? (
+                <div
+                  aria-busy={dataStatus === "loading" || !ready}
+                  className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/50"
+                >
+                  {dataStatus === "error" ? (
+                    <div
+                      role="alert"
+                      className="mx-auto flex min-h-[320px] max-w-198.5 items-center justify-center bg-white p-8 text-center"
+                    >
+                      <p className="max-w-sm text-sm text-rose-600">
+                        No se pudieron cargar los ítems de la factura. Cierra y vuelve a abrirla para intentarlo de nuevo.
+                      </p>
+                    </div>
+                  ) : showPreview ? (
                     <InvoicePreview
                       ref={printRef}
                       sale={sale}
@@ -1229,8 +1313,9 @@ export function SaleInvoiceModal({ sale, company }: SaleInvoiceModalProps) {
                       planSummary={planSummary}
                     />
                   ) : (
-                    // Skeleton shown while phase-2 renders
+                    // Skeleton mientras cargan ítems/plan y renderiza la fase 2
                     <div className="mx-auto max-w-198.5 space-y-4 bg-white p-8">
+                      <span role="status" className="sr-only">Cargando factura</span>
                       <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-5">
                         <div className="space-y-2">
                           <div className="h-3 w-24 animate-pulse rounded-full bg-slate-200" />

@@ -1,5 +1,6 @@
 import "server-only";
 import { formatCurrency } from "@/lib/currency-format";
+import { EMAIL_SENDER } from "@/lib/legal/entity";
 
 const PLAN_LABELS: Record<string, string> = {
   emprende: "Emprende",
@@ -32,7 +33,7 @@ export async function sendPaymentClaimEmail({
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      from: "Monexity <admin@monexity-app.com>",
+      from: EMAIL_SENDER,
       to: [to],
       subject: `Pago Yappy reclamado — ${formatCurrency(exactAmount)}`,
       html: `

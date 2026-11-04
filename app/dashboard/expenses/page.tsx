@@ -292,6 +292,7 @@ export default async function ExpensesPage() {
                                 <input type="hidden" name="expenseId" value={expense.id} />
                                 <ConfirmSubmitButton
                                   label="Eliminar"
+                                  pendingLabel="Eliminando..."
                                   confirmMessage="¿Seguro que quieres eliminar este gasto?"
                                   className="rounded-2xl border border-rose-200/80 bg-rose-50/80 px-4 py-2 text-sm text-rose-600 transition hover:border-rose-300 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-400/25 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/15 dark:hover:text-rose-200"
                                 />

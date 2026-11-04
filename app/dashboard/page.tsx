@@ -12,6 +12,7 @@ import {
 } from "../../lib/admin-auth";
 import { formatShortDate } from "../../lib/date-format";
 import { formatCurrency } from "../../lib/currency-format";
+import { InsightsChartsSkeleton } from "../../components/page-skeletons";
 
 const DashboardInsightsCharts = dynamic(
   () =>
@@ -19,14 +20,7 @@ const DashboardInsightsCharts = dynamic(
       (mod) => mod.DashboardInsightsCharts
     ),
   {
-    loading: () => (
-      <div className="grid gap-4 xl:grid-cols-2">
-        <div className="h-80 animate-pulse rounded-3xl bg-slate-200/60 dark:bg-slate-800/60" />
-        <div className="h-80 animate-pulse rounded-3xl bg-slate-200/60 dark:bg-slate-800/60" />
-        <div className="h-80 animate-pulse rounded-3xl bg-slate-200/60 dark:bg-slate-800/60" />
-        <div className="h-80 animate-pulse rounded-3xl bg-slate-200/60 dark:bg-slate-800/60" />
-      </div>
-    ),
+    loading: () => <InsightsChartsSkeleton />,
   }
 );
 
@@ -43,7 +37,6 @@ const mainSectionCardClass = "app-panel min-w-0 max-w-full rounded-[30px] p-5";
 const statCardClass = "app-card min-w-0 max-w-full rounded-[24px] p-4";
 const movementCardClass = "app-card min-w-0 max-w-full rounded-[24px] px-4 py-3";
 const shortcutTriggerClass = "app-card-interactive group min-w-0 max-w-full rounded-[20px] p-3";
-const actionLinkClass = "app-button-soft";
 
 type RecentMovement = {
   id: string;
@@ -336,27 +329,43 @@ function StatCard({
   );
 }
 
-function ShortcutTriggerCard({ title, description }: { title: string; description: string }) {
+type ShortcutTone = "sale" | "expense" | "quote";
+
+const SHORTCUT_ICON_TONE: Record<ShortcutTone, string> = {
+  sale: "bg-emerald-500/12 text-emerald-700 dark:bg-emerald-500/18 dark:text-emerald-300",
+  expense: "bg-red-500/10 text-red-700 dark:bg-red-500/18 dark:text-red-300",
+  quote: "bg-sky-500/12 text-sky-700 dark:bg-sky-500/18 dark:text-sky-300",
+};
+
+function ShortcutIcon({ tone }: { tone: ShortcutTone }) {
   return (
-    <div className={shortcutTriggerClass}>
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold leading-5 text-app">{title}</p>
-          <p className="mt-0.5 text-xs leading-5 text-app-muted">{description}</p>
-        </div>
-        <span className="shrink-0 rounded-full border border-app bg-app-soft px-2 py-0.5 text-[11px] text-app-muted transition-colors duration-150 group-hover:border-app-strong group-hover:text-app">
-          Abrir
-        </span>
-      </div>
-    </div>
+    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${SHORTCUT_ICON_TONE[tone]}`} aria-hidden="true">
+      {tone === "quote" ? (
+        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+          <path d="M8 4H6C4.9 4 4 4.9 4 6V18C4 19.1 4.9 20 6 20H18C19.1 20 20 19.1 20 18V6C20 4.9 19.1 4 18 4H16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M8 11H16M8 15H13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+          <path d={tone === "sale" ? "M12 5v14M5 12h14" : "M5 12h14"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      )}
+    </span>
   );
 }
 
-function ActionLink({ href, label }: { href: string; label: string }) {
+// Tarjeta de acceso rápido: área táctil ≥ 44 px, icono por tipo y descripción corta
+function ShortcutTriggerCard({ title, description, tone }: { title: string; description: string; tone: ShortcutTone }) {
   return (
-    <Link href={href} className={`${actionLinkClass} min-w-0 max-w-full`}>
-      {label}
-    </Link>
+    <div className={shortcutTriggerClass}>
+      <div className="flex min-h-11 min-w-0 items-center gap-3">
+        <ShortcutIcon tone={tone} />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold leading-5 text-app">{title}</p>
+          <p className="mt-0.5 truncate text-xs leading-5 text-app-muted">{description}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -425,7 +434,7 @@ export default async function DashboardPage() {
 
   const membershipQuery = supabase
     .from("memberships")
-    .select("company_id, companies(owner_user_id)")
+    .select("company_id, role, companies(owner_user_id)")
     .eq("user_id", user.id);
 
   const { data: membership } = await (
@@ -448,6 +457,10 @@ export default async function DashboardPage() {
     .eq("company_id", membership.company_id)
     .eq("user_id", SPECIAL_ADMIN_RELATED_ID)
     .maybeSingle();
+  // Misma regla que el layout: solo owner/admin entran a cotizaciones
+  const activeRole = String((membership as { role?: string | null }).role ?? "").toLowerCase();
+  const canCreateQuotations = activeRole === "owner" || activeRole === "admin";
+
   const canEditManualDates = canEditManualTransactionDates({
     email: user.email,
     userId: user.id,
@@ -477,19 +490,26 @@ export default async function DashboardPage() {
   const tomorrowDate = new Date(`${today}T12:00:00`);
   tomorrowDate.setDate(tomorrowDate.getDate() + 1);
   const tomorrow = getPanamaDateParts(tomorrowDate).iso;
+  // Ventas por fecha de venta (productos): rango más amplio de los filtros (30 días / mes)
   const chartStart = startStr < last30Start ? startStr : last30Start;
-  const chartStartDate = new Date(`${chartStart}T12:00:00`);
+  // Serie diaria de cobros/gastos: incluye el período anterior equivalente de cada
+  // filtro (los 30 días previos a los últimos 30, y el mes anterior completo).
+  const last60StartDate = new Date(`${today}T12:00:00`);
+  last60StartDate.setDate(last60StartDate.getDate() - 59);
+  const last60Start = getPanamaDateParts(last60StartDate).iso;
+  const trendStart = prev1Range.start < last60Start ? prev1Range.start : last60Start;
+  const trendStartDate = new Date(`${trendStart}T12:00:00`);
   const todayDate = new Date(`${today}T12:00:00`);
   const trendDaysCount = Math.max(
     1,
-    Math.round((todayDate.getTime() - chartStartDate.getTime()) / 86_400_000) + 1
+    Math.round((todayDate.getTime() - trendStartDate.getTime()) / 86_400_000) + 1
   );
   const trendDates = Array.from({ length: trendDaysCount }, (_, index) => {
-    const d = new Date(`${chartStart}T12:00:00`);
+    const d = new Date(`${trendStart}T12:00:00`);
     d.setDate(d.getDate() + index);
     return getPanamaDateParts(d).iso;
   });
-  const collectedStart = prev2Range.start < chartStart ? prev2Range.start : chartStart;
+  const collectedStart = prev2Range.start < trendStart ? prev2Range.start : trendStart;
 
   const [
     { data: profile },
@@ -541,7 +561,8 @@ export default async function DashboardPage() {
       .from("expenses")
       .select("amount, expense_date")
       .eq("company_id", membership.company_id)
-      .in("expense_date", trendDates),
+      .gte("expense_date", trendStart)
+      .lt("expense_date", tomorrow),
     fetchActivePaymentMethods(membership.company_id),
     fetchActiveProducts(membership.company_id),
     fetchActiveServices(membership.company_id),
@@ -631,14 +652,9 @@ export default async function DashboardPage() {
     saleDate: sale.sale_date,
   }));
 
-  const chartSaleIds = Array.from(
-    new Set([
-      ...chartSales.map((sale) => sale.id),
-      ...collectedEvents
-        .filter((event) => event.date >= chartStart && event.date < tomorrow)
-        .map((event) => event.saleId),
-    ])
-  );
+  // Productos vendidos se atribuyen a la fecha de VENTA: un abono reciente no
+  // vuelve a contar productos de una venta antigua.
+  const chartSaleIds = Array.from(new Set(chartSales.map((sale) => sale.id)));
 
   const [{ data: chartSaleItemsData }] = await Promise.all([
     chartSaleIds.length > 0
@@ -740,7 +756,7 @@ export default async function DashboardPage() {
     .reduce((sum, event) => sum + event.amount, 0);
 
   const collectedChartSales: DashboardChartSale[] = collectedEvents
-    .filter((event) => event.date >= chartStart && event.date < tomorrow)
+    .filter((event) => event.date >= trendStart && event.date < tomorrow)
     .map((event) => ({
       id: event.saleId,
       amount: event.amount,
@@ -759,7 +775,7 @@ export default async function DashboardPage() {
   const expensesByDate = new Map<string, number>();
 
   for (const event of collectedEvents) {
-    if (!trendDates.includes(event.date)) continue;
+    if (event.date < trendStart || event.date >= tomorrow) continue;
     const current = salesByDate.get(event.date) ?? 0;
     salesByDate.set(event.date, current + event.amount);
   }
@@ -893,8 +909,10 @@ export default async function DashboardPage() {
         </div>
 
         <div className={`${mainSectionCardClass} animate-mx-fade-up [animation-delay:100ms]`}>
-          <h2 className="text-2xl font-semibold text-app">Shortcuts</h2>
-          <div className="mt-3 grid min-w-0 gap-2.5 sm:grid-cols-2">
+          <h2 className="text-2xl font-semibold text-app">Accesos rápidos</h2>
+          {/* Orden por frecuencia: venta → gasto → cotización. "Ver ventas/gastos" se
+              quitaron: duplicaban la navegación lateral. */}
+          <div className="mt-3 grid min-w-0 gap-2.5">
             <CreateSaleQuickModal
               today={today}
               paymentMethods={paymentMethods}
@@ -902,26 +920,24 @@ export default async function DashboardPage() {
               services={activeServices}
               canEditManualDates={canEditManualDates}
               trigger={
-                <ShortcutTriggerCard
-                  title="Nueva venta"
-                  description="Registra una venta en segundos."
-                />
+                <ShortcutTriggerCard tone="sale" title="Nueva venta" description="Registra un cobro completo o por cuotas." />
               }
             />
             <CreateExpenseQuickModal
               today={today}
               canEditManualDates={canEditManualDates}
               trigger={
-                <ShortcutTriggerCard
-                  title="Nuevo gasto"
-                  description="Registra un gasto en segundos."
-                />
+                <ShortcutTriggerCard tone="expense" title="Nuevo gasto" description="Anota una compra o un pago del negocio." />
               }
             />
-          </div>
-          <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
-            <ActionLink href="/dashboard/sales" label="Ver ventas" />
-            <ActionLink href="/dashboard/expenses" label="Ver gastos" />
+            {canCreateQuotations ? (
+              <Link
+                href="/dashboard/quotations?nueva=1"
+                className="block rounded-[20px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+              >
+                <ShortcutTriggerCard tone="quote" title="Nueva cotización" description="Prepara una propuesta para tu cliente." />
+              </Link>
+            ) : null}
           </div>
         </div>
 
@@ -933,7 +949,7 @@ export default async function DashboardPage() {
                 Balance y rendimiento
               </h2>
               <p className="mt-2 text-sm text-app-muted">
-                Visualiza el estado del mes, el ritmo diario y la tendencia reciente.
+                Compara tus cobros y gastos con el período anterior equivalente.
               </p>
             </div>
             <DashboardInsightsCharts
@@ -942,9 +958,11 @@ export default async function DashboardPage() {
               trendData={trendData}
               monthlyData={monthlyData}
               chartSales={collectedChartSales}
+              soldSales={chartSales.map((sale) => ({ id: sale.id, saleDate: sale.saleDate }))}
               chartSaleItems={chartSaleItems}
               today={today}
               monthStart={startStr}
+              prevMonthStart={prev1Range.start}
               balanceMonth={balanceMonth}
               salesMonth={totalSalesMonth}
               expensesMonth={totalExpensesMonth}

@@ -364,3 +364,58 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ─── Homepage: revelado al entrar al viewport ──────────────────────────────── */
+/* Solo se ocultan elementos cuando ScrollReveal ya está activo (html.mx-reveal-ready)
+   y aún no fueron revelados: sin JS o con movimiento reducido, todo es visible.
+   Lo que ya está en pantalla al cargar se marca revelado antes de activar el
+   estado inicial, así no hay parpadeo. Solo opacity/transform, una sola vez. */
+
+@media (prefers-reduced-motion: no-preference) {
+  .mx-reveal-ready [data-reveal] {
+    transition:
+      opacity 520ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: calc(var(--reveal-step, 0) * 70ms);
+  }
+
+  .mx-reveal-ready [data-reveal]:not([data-revealed]) {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  .mx-reveal-ready [data-reveal="scale"]:not([data-revealed]) {
+    transform: translateY(18px) scale(0.985);
+  }
+
+  /* Escalonado por posición (hasta 6 hijos) */
+  [data-reveal-step="1"] { --reveal-step: 1; }
+  [data-reveal-step="2"] { --reveal-step: 2; }
+  [data-reveal-step="3"] { --reveal-step: 3; }
+  [data-reveal-step="4"] { --reveal-step: 4; }
+  [data-reveal-step="5"] { --reveal-step: 5; }
+
+  /* Barras de previews: crecen una vez cuando su bloque se revela */
+  .mx-reveal-ready [data-reveal] .mx-grow-y {
+    transform-origin: bottom;
+    transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1) 180ms;
+  }
+
+  .mx-reveal-ready [data-reveal]:not([data-revealed]) .mx-grow-y {
+    transform: scaleY(0.08);
+  }
+
+  .mx-reveal-ready [data-reveal] .mx-grow-x {
+    transform-origin: left;
+    transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1) 180ms;
+  }
+
+  .mx-reveal-ready [data-reveal]:not([data-revealed]) .mx-grow-x {
+    transform: scaleX(0.05);
+  }
+
+  /* Respuesta del FAQ al abrir */
+  .mx-faq[open] > :not(summary) {
+    animation: mx-fade-up 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}

@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { ButtonSpinner } from "@/components/button-spinner";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
+import { FormSubmitButton } from "@/components/submit-button";
 import { formatCurrency as formatMoney } from "@/lib/currency-format";
 import {
   createService,
@@ -275,16 +277,12 @@ function ServiceModal({
 }) {
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [open, onClose]);
+    return lockBodyScroll();
+  }, [open]);
+
+  // Foco, Tab confinado, Escape y retorno de foco al disparador
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose });
 
   if (!open) return null;
 
@@ -303,20 +301,26 @@ function ServiceModal({
       {/* Scroll container */}
       <div className="absolute inset-0 overflow-y-auto overscroll-contain p-4">
         <div className="flex min-h-full items-center justify-center">
-          <div className="relative my-4 w-full max-w-sm overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700/60 dark:bg-[#111726] dark:shadow-[0_24px_80px_rgba(0,0,0,0.50)]">
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            className="relative my-4 w-full max-w-sm overflow-hidden rounded-[28px] border border-slate-200 bg-white outline-none shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700/60 dark:bg-[#111726] dark:shadow-[0_24px_80px_rgba(0,0,0,0.50)]">
             {/* Header */}
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 pb-4 pt-5 dark:border-slate-700/50">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-sky-600 dark:text-cyan-400">
                   Servicios
                 </p>
-                <h3 className="mt-0.5 text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-50">
+                <h3 id={titleId} className="mt-0.5 text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-50">
                   {title}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={onClose}
+                aria-label="Cerrar"
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition hover:text-slate-900 dark:border-slate-700 dark:text-slate-500 dark:hover:text-slate-100"
               >
                 ✕
@@ -400,26 +404,26 @@ function ServiceCard({
             <input type="hidden" name="serviceId" value={svc.id} />
             <input type="hidden" name="companyId" value={companyId} />
             <input type="hidden" name="is_active" value={svc.is_active ? "false" : "true"} />
-            <button
-              type="submit"
+            <FormSubmitButton
+              pendingText={svc.is_active ? "Desactivando..." : "Activando..."}
               className="rounded-xl border border-app bg-app-soft px-3 py-1.5 text-xs font-medium text-app-muted transition hover:text-app"
             >
               {svc.is_active ? "Desactivar" : "Activar"}
-            </button>
+            </FormSubmitButton>
           </form>
 
           <form action={deleteService}>
             <input type="hidden" name="serviceId" value={svc.id} />
             <input type="hidden" name="companyId" value={companyId} />
-            <button
-              type="submit"
+            <FormSubmitButton
+              pendingText="Eliminando..."
               className="rounded-xl border border-red-200/70 bg-red-50/70 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
               onClick={(e) => {
                 if (!confirm(`¿Eliminar "${svc.name}"?`)) e.preventDefault();
               }}
             >
               Eliminar
-            </button>
+            </FormSubmitButton>
           </form>
         </div>
       )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useId, useMemo, useRef } from "react";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import { createPortal } from "react-dom";
 import { formatCurrency } from "../../../lib/currency-format";
 import type { Product } from "../inventario/types";
@@ -69,18 +70,31 @@ export function ProductPickerModal({
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [open, onClose]);
+    return lockBodyScroll();
+  }, [open]);
+
+  // Foco, Tab confinado, Escape (solo el diálogo superior) y retorno de foco
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose });
 
   const selectedProduct = products.find((p) => p.id === selectedId) ?? null;
+  const selectedProductName = selectedProduct?.name ?? "";
+
+  // Lista abierta ([data-escape-layer]): Escape la cierra sin importar dónde esté el
+  // foco (input, botón "Mostrar productos" u opción). El diálogo ignora ese Escape;
+  // con la lista ya cerrada, el siguiente Escape cierra el diálogo.
+  useEffect(() => {
+    if (!open || !productListOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setProductListOpen(false);
+      setProductQuery(selectedProductName);
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [open, productListOpen, selectedProductName]);
 
   const filteredProducts = useMemo(() => {
     const query = productQuery.trim().toLowerCase();
@@ -126,8 +140,8 @@ export function ProductPickerModal({
       setError("Selecciona un producto.");
       return;
     }
-    const qty = Math.floor(Number(rawQty));
-    if (!Number.isFinite(qty) || qty <= 0) {
+    const qty = Number(rawQty);
+    if (!Number.isInteger(qty) || qty <= 0) {
       setError("La cantidad debe ser un número entero mayor a 0.");
       return;
     }
@@ -166,20 +180,26 @@ export function ProductPickerModal({
       />
       <div className="absolute inset-0 overflow-y-auto overscroll-contain p-4">
         <div className="flex min-h-full items-center justify-center">
-          <div className="relative my-4 w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            className="relative my-4 w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-5 outline-none shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
             {/* Header */}
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-sky-600 dark:text-cyan-400">
                   Inventario
                 </p>
-                <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                <h3 id={titleId} className="mt-1 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                   Agregar producto
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={onClose}
+                aria-label="Cerrar"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 text-slate-400 transition hover:text-slate-900 dark:border-slate-700 dark:hover:text-slate-100"
               >
                 ✕
@@ -250,14 +270,7 @@ export function ProductPickerModal({
                         const product = filteredProducts[safeActiveProductIndex];
                         if (product) selectProduct(product);
                       }
-
-                      if (event.key === "Escape" && productListOpen) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        event.nativeEvent.stopImmediatePropagation();
-                        setProductListOpen(false);
-                        setProductQuery(selectedProduct?.name ?? "");
-                      }
+                      // Escape con la lista abierta: lo maneja el listener de document
                     }}
                     className={comboboxInputClass}
                   />
@@ -280,6 +293,8 @@ export function ProductPickerModal({
                     <div
                       id={productListboxId}
                       role="listbox"
+                      // Escape cierra primero esta lista, no el diálogo
+                      data-escape-layer=""
                       className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 max-h-[min(18rem,42vh)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-1 shadow-[0_18px_40px_rgba(15,23,42,0.16)] dark:border-slate-700 dark:bg-slate-950 dark:shadow-[0_18px_40px_rgba(0,0,0,0.42)]"
                     >
                       {filteredProducts.length > 0 ? (

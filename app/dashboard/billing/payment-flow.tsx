@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { CreditCard } from "lucide-react";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import { PLANS } from "@/lib/plans/plans";
 import {
   cancelScheduledSubscriptionChange,
@@ -103,6 +104,7 @@ export function PaymentFlow({
   const [discountStatus, setDiscountStatus] = useState<DiscountStatus>("empty");
   const [discountResult, setDiscountResult] = useState<DiscountValidationResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checkoutStage, setCheckoutStage] = useState<"idle" | "preparing" | "redirecting">("idle");
   const [cancellingSchedule, startScheduleTransition] = useTransition();
   const [validatingDiscount, startDiscountTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -119,22 +121,19 @@ export function PaymentFlow({
 
   useEffect(() => {
     if (!yappyModalOpen) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setYappyModalOpen(false);
-    };
-
-    document.addEventListener("keydown", onKeyDown);
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "";
-    };
+    return lockBodyScroll();
   }, [yappyModalOpen]);
 
+  // Foco, Tab confinado, Escape y retorno de foco al disparador
+  const yappyPanelRef = useModalAccessibility({
+    open: yappyModalOpen,
+    onClose: () => setYappyModalOpen(false),
+  });
+
   async function handleCheckout() {
+    let redirecting = false;
     setLoading(true);
+    setCheckoutStage("preparing");
     setError(null);
     setMessage(null);
 
@@ -168,8 +167,17 @@ export function PaymentFlow({
         return;
       }
 
+      // "paid" solo llega cuando el servidor ya lo confirmó con Tilopay (consult).
       if (res.ok && data.status === "paid") {
-        window.location.reload();
+        const billingUrl = new URL("/dashboard/billing", window.location.origin);
+        billingUrl.searchParams.set("tilopay", "return");
+        if (data.intentId) billingUrl.searchParams.set("intent", data.intentId);
+        window.location.href = billingUrl.toString();
+        return;
+      }
+
+      if (data.status === "verifying") {
+        setMessage(data.error ?? "Estamos verificando tu pago. No vuelvas a pagar.");
         return;
       }
 
@@ -178,11 +186,17 @@ export function PaymentFlow({
         return;
       }
 
+      redirecting = true;
+      setCheckoutStage("redirecting");
       window.location.href = data.checkoutUrl;
     } catch {
       setError("Error de conexión. Intenta nuevamente.");
     } finally {
-      setLoading(false);
+      // Mientras el navegador navega a Tilopay se mantiene el estado "redirigiendo".
+      if (!redirecting) {
+        setLoading(false);
+        setCheckoutStage("idle");
+      }
     }
   }
 
@@ -236,7 +250,12 @@ export function PaymentFlow({
     }
   }
 
-  const isActive = ["active", "paid"].includes(currentStatus);
+  // Mismo criterio que hasValidPaidPeriod: un active vencido se trata como renovación.
+  const isActive = Boolean(
+    ["active", "paid"].includes(currentStatus) &&
+      renewalDate &&
+      new Date(renewalDate).getTime() > now
+  );
   const isTrialing = currentStatus === "trialing";
   const hasValidTrial = Boolean(
     isTrialing && renewalDate && new Date(renewalDate).getTime() > now
@@ -298,6 +317,8 @@ export function PaymentFlow({
   const displayedDiscountAmount = discountResult?.ok ? discountResult.discountAmount : 0;
   const displayedFinalAmount = discountResult?.ok ? discountResult.finalAmount : baseAmount;
   const hasInvalidCheckoutAmount = displayedFinalAmount <= 0;
+  const checkoutLoadingLabel =
+    checkoutStage === "redirecting" ? "Redirigiendo a Tilopay..." : "Preparando pago...";
   const buttonLabel = isPlanChange
     ? hasValidTrial
       ? "Cambiar ahora"
@@ -386,7 +407,7 @@ export function PaymentFlow({
         <p className="mt-1 text-xs leading-5 text-app-soft">
           {hasValidTrial
             ? "Durante tu prueba puedes cambiar de plan sin costo. La fecha de finalización se mantiene."
-            : "Cuando corresponda, podrás pagar de forma segura con PagueloFácil."}
+            : "Paga con tarjeta de forma segura mediante Tilopay o por Yappy."}
         </p>
       </div>
 
@@ -597,7 +618,7 @@ export function PaymentFlow({
                 className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[22px] bg-sky-600 px-4 py-3.5 text-sm font-semibold text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 motion-reduce:transition-none dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
               >
                 <CreditCard className="h-4 w-4" aria-hidden="true" />
-                {loading ? "Procesando..." : "Pagar con tarjeta"}
+                {loading ? checkoutLoadingLabel : "Pagar con tarjeta"}
               </button>
 
               <button
@@ -630,7 +651,7 @@ export function PaymentFlow({
               disabled={loading || !canManage || hasInvalidCheckoutAmount}
               className="w-full rounded-[22px] bg-sky-600 py-3.5 text-sm font-semibold text-white transition-[background-color,opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-sky-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 motion-reduce:transition-none dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
             >
-              {loading ? "Procesando..." : buttonLabel}
+              {loading ? checkoutLoadingLabel : buttonLabel}
             </button>
           )}
         </div>
@@ -647,10 +668,11 @@ export function PaymentFlow({
           <div className="absolute inset-0 overflow-y-auto overscroll-contain p-4">
             <div className="flex min-h-full items-center justify-center">
               <div
+                ref={yappyPanelRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="yappy-payment-title"
-                className="relative my-4 w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-5 text-app shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-950 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+                className="relative my-4 w-full max-w-sm rounded-[28px] border border-slate-200 bg-white p-5 text-app outline-none shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-950 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>

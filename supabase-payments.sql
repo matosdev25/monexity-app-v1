@@ -173,8 +173,8 @@ DECLARE
   v_amount     numeric;
   v_slot_id    uuid;
 BEGIN
-  -- Verificar que el caller es el usuario declarado
-  IF auth.uid() != p_user_id THEN
+  -- Verificar que el caller es el usuario declarado (sin sesión = rechazado)
+  IF auth.uid() IS NULL OR auth.uid() IS DISTINCT FROM p_user_id THEN
     RAISE EXCEPTION 'FORBIDDEN';
   END IF;
 
@@ -243,10 +243,13 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION create_payment_intent TO authenticated;
+REVOKE EXECUTE ON FUNCTION create_payment_intent(uuid, uuid, text, text, timestamptz) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION create_payment_intent(uuid, uuid, text, text, timestamptz) TO authenticated, service_role;
 
 -- ── 8. Función: activar suscripción ──────────────────────────────
 -- Solo callable desde service role (admin endpoints).
+-- Versión base: supabase-paguelofacil.sql la reemplaza (soporta plan_upgrade).
+-- No re-ejecutar este archivo después de supabase-paguelofacil.sql.
 -- Idempotente: si ya está paid, retorna sin error.
 -- Extiende período si la suscripción actual aún está vigente.
 
@@ -327,10 +330,14 @@ BEGIN
       jsonb_build_object('period_start', v_period_start, 'period_end', v_period_end));
 END;
 $$;
--- Sin GRANT: solo service_role puede llamarlo
+-- Solo service_role. Omitir GRANT no basta: PUBLIC/anon/authenticated
+-- reciben EXECUTE por defecto, por eso se revoca explícitamente.
+REVOKE EXECUTE ON FUNCTION activate_subscription_from_intent(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION activate_subscription_from_intent(uuid, text) TO service_role;
 
 -- ── 9. Función: expirar intentos vencidos ───────────────────────
--- Llamada por el cron. Libera slots de intentos expirados.
+-- Llamada por el cron. Bloquea solo filas libres (SKIP LOCKED), las expira,
+-- libera sus slots y audita el estado anterior real, todo en una transacción.
 
 CREATE OR REPLACE FUNCTION expire_stale_intents()
 RETURNS integer
@@ -339,30 +346,41 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_ids      uuid[];
-  v_slot_ids uuid[];
+  v_count integer;
 BEGIN
-  SELECT array_agg(id), array_agg(slot_id)
-  INTO v_ids, v_slot_ids
-  FROM payment_intents
-  WHERE status IN ('pending', 'claimed', 'awaiting_verification')
-    AND expires_at < NOW()
-  FOR UPDATE SKIP LOCKED;
+  WITH locked AS (
+    SELECT pi.id, pi.status AS old_status, pi.slot_id
+    FROM payment_intents pi
+    WHERE pi.status IN ('pending', 'claimed', 'awaiting_verification')
+      AND pi.expires_at < NOW()
+    FOR UPDATE SKIP LOCKED
+  ),
+  expired AS (
+    UPDATE payment_intents pi
+    SET status = 'expired', updated_at = NOW()
+    FROM locked l
+    WHERE pi.id = l.id
+    RETURNING pi.id, l.old_status, l.slot_id
+  ),
+  released AS (
+    UPDATE payment_amount_slots s
+    SET reserved_by = NULL, reserved_at = NULL, slot_expires_at = NULL
+    FROM expired e
+    WHERE s.id = e.slot_id
+      AND s.reserved_by = e.id
+    RETURNING s.id
+  ),
+  audited AS (
+    INSERT INTO payment_audit_logs (intent_id, action, from_status, to_status, actor_type)
+    SELECT e.id, 'expired', e.old_status, 'expired', 'system'
+    FROM expired e
+    RETURNING id
+  )
+  SELECT count(*)::integer INTO v_count FROM expired;
 
-  IF v_ids IS NULL THEN RETURN 0; END IF;
-
-  UPDATE payment_intents
-  SET status = 'expired', updated_at = NOW()
-  WHERE id = ANY(v_ids);
-
-  UPDATE payment_amount_slots
-  SET reserved_by = NULL, reserved_at = NULL, slot_expires_at = NULL
-  WHERE id = ANY(v_slot_ids) AND id IS NOT NULL;
-
-  INSERT INTO payment_audit_logs (intent_id, action, from_status, to_status, actor_type)
-  SELECT unnest(v_ids), 'expired', 'pending', 'expired', 'system';
-
-  RETURN array_length(v_ids, 1);
+  RETURN v_count;
 END;
 $$;
--- Sin GRANT: solo service_role
+-- Solo service_role (cron)
+REVOKE EXECUTE ON FUNCTION expire_stale_intents() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION expire_stale_intents() TO service_role;

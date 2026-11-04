@@ -1,6 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { OFFICIAL_EMAIL } from "@/lib/legal/entity";
 
 function getAdminEmails() {
   return (process.env.BILLING_ADMIN_EMAILS ?? "")
@@ -14,7 +15,9 @@ export function isGlobalAdminEmail(email: string | null | undefined) {
   return getAdminEmails().includes(email.trim().toLowerCase());
 }
 
-const SPECIAL_ADMIN_EMAIL = "admin@momenxity-app";
+// Correo oficial del proyecto (fuente única: LEGAL_ENTITY). Sigue exigiendo además
+// estar en BILLING_ADMIN_EMAILS (ver canEditManualTransactionDates).
+const SPECIAL_ADMIN_EMAIL = OFFICIAL_EMAIL;
 export const SPECIAL_ADMIN_RELATED_ID = "62185083-0917-4ea3-b9c7-dcf46ec9bbd7";
 
 export function canEditManualTransactionDates(params: {

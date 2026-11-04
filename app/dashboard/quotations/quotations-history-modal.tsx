@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useDeferredValue, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, useDeferredValue, type ReactNode } from "react";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { formatShortDate } from "../../../lib/date-format";
@@ -107,19 +108,14 @@ export function QuotationsHistoryModal({ quotations, from = "", to = "", trigger
 
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    const scrollContainer = document.querySelector<HTMLElement>("[data-scroll-container]");
-    document.addEventListener("keydown", onKeyDown);
-    document.body.style.overflow = "hidden";
-    if (scrollContainer) scrollContainer.style.overflowY = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "";
-      if (scrollContainer) scrollContainer.style.overflowY = "";
-    };
+    return lockBodyScroll();
   }, [open]);
 
   const closeModal = () => setOpen(false);
+
+  // Foco, Tab confinado, Escape (solo el diálogo superior) y retorno de foco
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose: closeModal });
 
   const handleApplyFilters = () => {
     setAppliedFrom(draftFrom);
@@ -176,7 +172,13 @@ export function QuotationsHistoryModal({ quotations, from = "", to = "", trigger
             />
 
             <div className="absolute inset-0 flex items-center justify-center p-4">
-              <div className={`${panelClass} relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden`}>
+              <div
+                ref={panelRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                className={`${panelClass} relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden outline-none`}
+              >
 
                 {/* Header con filtros */}
                 <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
@@ -185,7 +187,7 @@ export function QuotationsHistoryModal({ quotations, from = "", to = "", trigger
                       <p className="text-sm font-medium text-sky-700 dark:text-cyan-300">
                         Historial completo
                       </p>
-                      <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                      <h2 id={titleId} className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                         Cotizaciones
                       </h2>
                       <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">

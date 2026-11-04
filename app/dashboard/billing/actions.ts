@@ -3,8 +3,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateDiscountCodeForAmount } from "@/lib/discounts/validate-discount-code";
-import { getPlanAmount } from "@/lib/paguelofacil";
 import { PLAN_MAP } from "@/lib/plans/plans";
+import { getNextBillingPeriod, getPlanAmount } from "@/lib/billing/plans";
+import { hasValidPaidPeriod } from "@/lib/memberships/app-access";
 
 type BillingCycle = "monthly" | "annual";
 type SubscriptionActionResult = { success: boolean; error?: string };
@@ -139,7 +140,7 @@ export async function validateDiscountCode(
   }
 
   const baseAmount = getPlanAmount(PLAN_MAP[planId], billingCycle);
-  const validation = await validateDiscountCodeForAmount(code, billingCycle, baseAmount);
+  const validation = await validateDiscountCodeForAmount(code, billingCycle, baseAmount, companyId);
 
   return validation.ok
     ? { ...validation, baseAmount }
@@ -193,7 +194,7 @@ export async function createYappyManualPayment(
   const admin = createAdminClient();
   const { data: company } = await admin
     .from("companies")
-    .select("subscription_status, subscription_plan, subscription_billing_cycle, trial_ends_at")
+    .select("subscription_status, subscription_plan, subscription_billing_cycle, trial_ends_at, current_period_ends_at")
     .eq("id", companyId)
     .maybeSingle();
 
@@ -206,7 +207,7 @@ export async function createYappyManualPayment(
   }
 
   const currentStatus = String(company.subscription_status ?? "").toLowerCase();
-  const hasPaidAccess = ["active", "paid"].includes(currentStatus);
+  const hasPaidAccess = hasValidPaidPeriod(company);
   const hasValidTrial = Boolean(
     currentStatus === "trialing" &&
       company.trial_ends_at &&
@@ -230,7 +231,8 @@ export async function createYappyManualPayment(
     const validation = await validateDiscountCodeForAmount(
       discountCode,
       billingCycle,
-      exactAmount
+      exactAmount,
+      companyId
     );
 
     if (!validation.ok) {
@@ -262,6 +264,10 @@ export async function createYappyManualPayment(
     .eq("plan_id", planId)
     .eq("billing_cycle", billingCycle)
     .gt("expires_at", new Date().toISOString())
+    .not("period_start", "is", null)
+    .not("period_end", "is", null)
+    // El código de descuento forma parte de la identidad del intent reutilizable.
+    .filter("discount_code_id", discountCodeId ? "eq" : "is", discountCodeId ?? null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -280,6 +286,10 @@ export async function createYappyManualPayment(
   }
 
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { periodStart, periodEnd } = getNextBillingPeriod(
+    company.current_period_ends_at,
+    billingCycle
+  );
   const { data: intent, error } = await admin
     .from("payment_intents")
     .insert({
@@ -291,6 +301,8 @@ export async function createYappyManualPayment(
       provider: "yappy_manual",
       status: "manual_review",
       expires_at: expiresAt,
+      period_start: periodStart,
+      period_end: periodEnd,
       discount_code_id: discountCodeId,
       discount_code: appliedDiscountCode,
       discount_amount: discountAmount,
@@ -310,6 +322,28 @@ export async function createYappyManualPayment(
 
   if (error || !intent?.id) {
     return { success: false, error: "No se pudo registrar el pago por Yappy." };
+  }
+
+  // El descuento se reserva antes de que el cliente envíe el Yappy.
+  if (discountCodeId) {
+    const { data: reservation, error: reservationError } = await admin.rpc("reserve_intent_discount", {
+      p_intent_id: intent.id,
+    });
+
+    if (reservationError || (reservation !== "reserved" && reservation !== "already_reserved")) {
+      await admin
+        .from("payment_intents")
+        .update({ status: "cancelled" })
+        .eq("id", intent.id)
+        .eq("status", "manual_review");
+
+      return {
+        success: false,
+        error: reservation === "exhausted"
+          ? "Este código alcanzó su límite de usos."
+          : "No se pudo aplicar el código de descuento.",
+      };
+    }
   }
 
   return {

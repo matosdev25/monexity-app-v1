@@ -16,5 +16,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ expired: data ?? 0 });
+  // Depura cobros conservados de cuentas eliminadas cuyo retain_until ya venció.
+  const { data: purged, error: purgeError } = await admin.rpc("purge_expired_billing_retained_charges");
+
+  if (purgeError) {
+    return NextResponse.json({ error: purgeError.message, expired: data ?? 0 }, { status: 500 });
+  }
+
+  return NextResponse.json({ expired: data ?? 0, purged: purged ?? 0 });
 }

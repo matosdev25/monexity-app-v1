@@ -1,4 +1,5 @@
 import "server-only";
+import { EMAIL_SENDER } from "@/lib/legal/entity";
 
 // IMPORTANTE: el dominio monexity-app.com debe estar verificado
 // en el dashboard de Resend antes de que este remitente funcione.
@@ -129,7 +130,7 @@ export async function sendInviteEmail({
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        from: "Monexity <admin@monexity-app.com>",
+        from: EMAIL_SENDER,
         to: [to],
         subject: `Te invitaron a ${companyName} en Monexity`,
         html,

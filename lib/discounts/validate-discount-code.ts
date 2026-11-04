@@ -27,7 +27,10 @@ export function normalizeDiscountCode(rawCode: string) {
 export async function validateDiscountCodeForAmount(
   rawCode: string,
   billingCycle: DiscountBillingCycle,
-  baseAmount: number
+  baseAmount: number,
+  // Empresa que reintenta: si ya tiene reservado un uso de este código en un
+  // intent abierto, ese uso es suyo y el límite no la bloquea.
+  companyId?: string
 ): Promise<DiscountCodeValidation> {
   const code = normalizeDiscountCode(rawCode);
   if (!code) return { ok: false, message: "Ingresa un código." };
@@ -35,7 +38,7 @@ export async function validateDiscountCodeForAmount(
   const admin = createAdminClient();
   const { data: discount, error } = await admin
     .from("discount_codes")
-    .select("code, discount_type, discount_value, applies_to, starts_at, expires_at, max_uses, used_count, is_active")
+    .select("id, code, discount_type, discount_value, applies_to, starts_at, expires_at, max_uses, used_count, is_active")
     .eq("code", code)
     .maybeSingle();
 
@@ -53,7 +56,25 @@ export async function validateDiscountCodeForAmount(
   }
 
   if (discount.max_uses !== null && Number(discount.used_count) >= Number(discount.max_uses)) {
-    return { ok: false, code, message: "Este código alcanzó su límite de usos." };
+    let holdsReservation = false;
+    if (companyId) {
+      const { data: reserved } = await admin
+        .from("payment_intents")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("discount_code_id", discount.id)
+        .in("status", ["pending", "claimed", "awaiting_verification", "manual_review"])
+        .gt("expires_at", new Date().toISOString())
+        .not("discount_reserved_at", "is", null)
+        .is("discount_released_at", null)
+        .limit(1)
+        .maybeSingle();
+      holdsReservation = Boolean(reserved?.id);
+    }
+
+    if (!holdsReservation) {
+      return { ok: false, code, message: "Este código alcanzó su límite de usos." };
+    }
   }
 
   const appliesTo = String(discount.applies_to ?? "both");
@@ -78,8 +99,9 @@ export async function validateDiscountCodeForAmount(
   const discountAmount = Number(Math.min(baseAmount, rawDiscount).toFixed(2));
   const finalAmount = Number((baseAmount - discountAmount).toFixed(2));
 
-  if (finalAmount <= 0) {
-    return { ok: false, code, message: "El total final debe ser mayor a $0.00." };
+  // PROJECT.md §12: mínimo de cobro $1.50.
+  if (finalAmount < 1.5) {
+    return { ok: false, code, message: "El total final con descuento no puede ser menor a $1.50." };
   }
 
   return {

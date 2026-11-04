@@ -32,6 +32,7 @@ export function ProductsList({ products, companyId, canEdit }: Props) {
   }, [products, query]);
 
   function handleToggle(id: string) {
+    if (isPending) return;
     startTransition(async () => {
       const fd = new FormData();
       fd.set("id", id);
@@ -41,6 +42,7 @@ export function ProductsList({ products, companyId, canEdit }: Props) {
   }
 
   function handleDelete(id: string) {
+    if (isPending) return;
     if (!confirm("¿Eliminar este producto? Esta acción no se puede deshacer.")) return;
     startTransition(async () => {
       const fd = new FormData();
@@ -52,7 +54,7 @@ export function ProductsList({ products, companyId, canEdit }: Props) {
 
   function handleAdjust(id: string) {
     const delta = Number(adjustDelta);
-    if (!Number.isFinite(delta) || delta === 0) return;
+    if (isPending || !Number.isFinite(delta) || delta === 0) return;
     setError(null);
     startTransition(async () => {
       const fd = new FormData();
@@ -70,7 +72,7 @@ export function ProductsList({ products, companyId, canEdit }: Props) {
   }
 
   return (
-    <div className={isPending ? "pointer-events-none opacity-60" : ""}>
+    <div aria-busy={isPending} className={isPending ? "pointer-events-none opacity-60" : ""}>
       {/* Búsqueda */}
       {products.length > 0 && (
         <div className="mb-3">

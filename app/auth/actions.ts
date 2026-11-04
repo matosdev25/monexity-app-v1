@@ -6,6 +6,14 @@ import { cookies } from "next/headers";
 import { createClient } from "../../lib/supabase/server";
 import { createAdminClient } from "../../lib/supabase/admin";
 import { getCurrentUserAppEntryPath } from "../../lib/memberships/app-access";
+import { PRIVACY_VERSION, TERMS_VERSION } from "../../lib/legal/versions";
+import {
+  PENDING_SIGNUP_COOKIE,
+  PENDING_SIGNUP_DELETE_OPTIONS,
+  PENDING_SIGNUP_MAX_AGE_SECONDS,
+  PENDING_SIGNUP_PATH,
+  sealPendingSignup,
+} from "../../lib/auth/pending-signup";
 
 import type { ForgotPasswordState, SignUpState, SignInState } from "./types";
 
@@ -46,6 +54,7 @@ export async function signUp(
   const email = normalizeText(formData.get("email")).toLowerCase();
   const phone = normalizeText(formData.get("phone"));
   const password = normalizeText(formData.get("password"));
+  const acceptedLegal = formData.get("acceptLegal") === "yes";
 
   const fieldErrors: SignUpState["fieldErrors"] = {};
 
@@ -80,6 +89,10 @@ export async function signUp(
     fieldErrors.password = "Debe incluir una mayúscula, una minúscula y un número.";
   }
 
+  if (!acceptedLegal) {
+    fieldErrors.acceptLegal = "Debes aceptar los Términos de uso y la Política de privacidad.";
+  }
+
   if (Object.keys(fieldErrors).length > 0) {
     return { success: false, fieldErrors };
   }
@@ -112,19 +125,84 @@ export async function signUp(
     return { success: false, fieldErrors: { email: "Ese correo ya está registrado." } };
   }
 
-  // Guardar datos en cookie — la creación real del usuario ocurre durante el onboarding
-  const pendingPayload = Buffer.from(
-    JSON.stringify({ fn: fullName, un: username, em: email, ph: phoneToStore, pw: password })
-  ).toString("base64");
+  // La contraseña solo viaja aquí, una vez, a Supabase Auth. Si la confirmación de
+  // correo está desactivada, el cliente SSR guarda la sesión y el onboarding la usa.
+  const supabase = await createClient();
+  const acceptedAt = new Date().toISOString();
+  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name: fullName, username, phone: phoneToStore },
+    },
+  });
+
+  if (signUpError) {
+    if (signUpError.code === "user_already_exists" || signUpError.code === "email_exists") {
+      return { success: false, fieldErrors: { email: "Ese correo ya está registrado." } };
+    }
+    if (signUpError.code === "over_email_send_rate_limit" || signUpError.status === 429) {
+      return { success: false, formError: "Demasiados intentos. Espera unos minutos e intenta de nuevo." };
+    }
+    if (signUpError.code === "weak_password") {
+      return { success: false, fieldErrors: { password: "Elige una contraseña más segura." } };
+    }
+    return { success: false, formError: "No se pudo crear la cuenta. Intenta de nuevo." };
+  }
+
+  const newUser = signUpData.user;
+  // Con confirmación activa, un correo ya confirmado devuelve un usuario ofuscado
+  // sin identidades: no es una cuenta nueva y no se toca su perfil.
+  if (!newUser || (newUser.identities && newUser.identities.length === 0)) {
+    return { success: false, fieldErrors: { email: "Ese correo ya está registrado." } };
+  }
+
+  const userId = newUser.id;
+
+  const rollback = async (formError: string): Promise<SignUpState> => {
+    await adminClient.auth.admin.deleteUser(userId).catch(() => undefined);
+    if (signUpData.session) {
+      await supabase.auth.signOut().catch(() => undefined);
+    }
+    return { success: false, formError };
+  };
+
+  const { error: profileError } = await adminClient.from("profiles").upsert(
+    { id: userId, full_name: fullName, email, username, phone: phoneToStore },
+    { onConflict: "id" }
+  );
+  if (profileError) {
+    return rollback("No se pudo guardar el perfil. Intenta de nuevo.");
+  }
+
+  // Aceptación de Términos y Privacidad: user_id de Auth, fecha y versiones del servidor.
+  const { error: legalError } = await adminClient.from("user_legal_acceptances").insert({
+    user_id: userId,
+    terms_version: TERMS_VERSION,
+    privacy_version: PRIVACY_VERSION,
+    accepted_at: acceptedAt,
+  });
+  if (legalError) {
+    return rollback("No se pudo registrar la aceptación de los términos. Intenta de nuevo.");
+  }
 
   const cookieStore = await cookies();
-  cookieStore.set("pending_signup", pendingPayload, {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 30,
-    secure: process.env.NODE_ENV === "production",
-  });
+  if (!signUpData.session) {
+    // Sin sesión hasta confirmar el correo: solo el userId, cifrado y con expiración.
+    const pendingPayload = sealPendingSignup({ userId });
+    if (!pendingPayload) {
+      return rollback("No se pudo iniciar el registro. Intenta de nuevo.");
+    }
+    cookieStore.set(PENDING_SIGNUP_COOKIE, pendingPayload, {
+      path: PENDING_SIGNUP_PATH,
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: PENDING_SIGNUP_MAX_AGE_SECONDS,
+      secure: process.env.NODE_ENV === "production",
+    });
+  } else {
+    cookieStore.delete(PENDING_SIGNUP_DELETE_OPTIONS);
+  }
 
   redirect("/onboarding");
 }
@@ -219,7 +297,7 @@ export async function signOut() {
   }
 
   cookieStore.delete("active_company_id");
-  cookieStore.delete("pending_signup");
+  cookieStore.delete(PENDING_SIGNUP_DELETE_OPTIONS);
 
   revalidatePath("/");
   redirect("/");

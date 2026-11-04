@@ -7,22 +7,50 @@ import { createClient } from "../../lib/supabase/server";
 import { createAdminClient } from "../../lib/supabase/admin";
 import { normalizeInviteCodeInput } from "../../lib/invites/invite-utils";
 import { PLAN_MAP } from "../../lib/plans/plans";
+import {
+  PENDING_SIGNUP_COOKIE,
+  PENDING_SIGNUP_DELETE_OPTIONS,
+  openPendingSignup,
+} from "../../lib/auth/pending-signup";
 import type { OnboardingState } from "./types";
 
-// ─── Crear negocio ────────────────────────────────────────────────────────────
+type AdminClient = ReturnType<typeof createAdminClient>;
+type CookieStore = Awaited<ReturnType<typeof cookies>>;
 
-type PendingSignup = { fn: string; un: string; em: string; ph: string; pw: string };
+// Usuario del onboarding: la sesión si existe; si no (correo sin confirmar), el
+// userId de la cookie pending_signup cifrada. La cuenta, el perfil y la aceptación
+// legal ya los creó signUp(); aquí solo se crea el negocio o la membresía.
+async function resolveOnboardingUser(
+  sessionUserId: string | null,
+  adminClient: AdminClient,
+  cookieStore: CookieStore
+): Promise<{ userId: string; fromPendingSignup: boolean } | null> {
+  if (sessionUserId) return { userId: sessionUserId, fromPendingSignup: false };
 
-function parsePendingSignup(raw: string): PendingSignup | null {
-  try {
-    const parsed = JSON.parse(Buffer.from(raw, "base64").toString("utf-8")) as Record<string, unknown>;
-    if (parsed?.fn && parsed?.un && parsed?.em && parsed?.pw) {
-      return parsed as unknown as PendingSignup;
-    }
-    return null;
-  } catch {
-    return null;
+  // Ausente, alterada o vencida → registro
+  const pending = openPendingSignup(cookieStore.get(PENDING_SIGNUP_COOKIE)?.value);
+  if (!pending) redirect("/auth/sign-up");
+
+  const { data: authUser, error: authError } = await adminClient.auth.admin.getUserById(pending.userId);
+  if (authError || !authUser?.user) {
+    cookieStore.delete(PENDING_SIGNUP_DELETE_OPTIONS);
+    redirect("/auth/sign-up");
   }
+
+  // La cookie sirve para un único onboarding: si ya tiene acceso a un negocio,
+  // debe iniciar sesión (evita reutilizar la cookie para crear más negocios).
+  const { count, error: membershipError } = await adminClient
+    .from("memberships")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", pending.userId);
+  // null = no se pudo verificar (error recuperable: se conserva la cookie)
+  if (membershipError || count === null) return null;
+  if (count > 0) {
+    cookieStore.delete(PENDING_SIGNUP_DELETE_OPTIONS);
+    redirect("/auth/login");
+  }
+
+  return { userId: pending.userId, fromPendingSignup: true };
 }
 
 export async function createBusiness(
@@ -65,44 +93,11 @@ export async function createBusiness(
     return { success: false, message: "Ya existe un negocio con ese nombre. Elige uno diferente." };
   }
 
-  let userId: string;
-  let isNewUser = false;
-
-  if (existingUser) {
-    userId = existingUser.id;
-  } else {
-    // Crear usuario desde cookie de signup pendiente (envía correo de confirmación)
-    const pendingRaw = cookieStore.get("pending_signup")?.value;
-    if (!pendingRaw) redirect("/auth/sign-up");
-
-    const pending = parsePendingSignup(pendingRaw);
-    if (!pending) redirect("/auth/sign-up");
-
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: pending.em,
-      password: pending.pw,
-      options: {
-        data: { full_name: pending.fn, username: pending.un, phone: pending.ph },
-      },
-    });
-
-    if (signUpError || !signUpData.user) {
-      return { success: false, message: signUpError?.message || "No se pudo crear el usuario." };
-    }
-
-    userId = signUpData.user.id;
-    isNewUser = true;
-
-    const { error: profileError } = await adminClient.from("profiles").upsert(
-      { id: userId, full_name: pending.fn, email: pending.em, username: pending.un, phone: pending.ph },
-      { onConflict: "id" }
-    );
-
-    if (profileError) {
-      await adminClient.auth.admin.deleteUser(userId);
-      return { success: false, message: "No se pudo guardar el perfil." };
-    }
+  const resolved = await resolveOnboardingUser(existingUser?.id ?? null, adminClient, cookieStore);
+  if (!resolved) {
+    return { success: false, message: "No se pudo verificar tu registro. Intenta de nuevo." };
   }
+  const { userId, fromPendingSignup } = resolved;
 
   const trialStartsAt = new Date();
   const trialEndsAt = new Date(trialStartsAt.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -124,8 +119,8 @@ export async function createBusiness(
     .select("id")
     .single();
 
+  // Errores recuperables: la cuenta ya existe y se conserva junto con la cookie para reintentar.
   if (companyError || !company) {
-    if (isNewUser) await adminClient.auth.admin.deleteUser(userId);
     if (companyError?.code === "23505") {
       return { success: false, message: "Ya existe un negocio con ese nombre. Elige uno diferente." };
     }
@@ -141,12 +136,12 @@ export async function createBusiness(
 
   if (membershipError) {
     await adminClient.from("companies").delete().eq("id", company.id);
-    if (isNewUser) await adminClient.auth.admin.deleteUser(userId);
-    return { success: false, message: membershipError.message ?? "No se pudo crear el acceso al negocio." };
+    return { success: false, message: "No se pudo crear el acceso al negocio. Intenta de nuevo." };
   }
 
-  if (isNewUser) {
-    cookieStore.delete("pending_signup");
+  cookieStore.delete(PENDING_SIGNUP_DELETE_OPTIONS);
+
+  if (fromPendingSignup) {
     return { success: true, message: "", requiresConfirmation: true };
   }
 
@@ -190,95 +185,35 @@ export async function joinViaCode(
     return { success: false, message: "Ingresa un código de invitación válido." };
   }
 
-  // Validar invite via RPC antes de crear el usuario
-  type InviteLookup = { id: string; company_id: string; role: string | null };
-  const { data: invite, error: inviteError } = await adminClient
-    .rpc("get_valid_company_invite", { invite_code: code })
-    .maybeSingle() as { data: InviteLookup | null; error: unknown };
+  const resolved = await resolveOnboardingUser(existingUser?.id ?? null, adminClient, cookieStore);
+  if (!resolved) {
+    return { success: false, message: "No se pudo verificar tu registro. Intenta de nuevo." };
+  }
+  const { userId, fromPendingSignup } = resolved;
 
-  if (inviteError) {
-    return { success: false, message: "No se pudo validar el código." };
+  // Bloquea la invitación, crea la membresía y la consume en una sola transacción:
+  // dos solicitudes simultáneas con el mismo código no pueden usarla ambas.
+  const { data: consumed, error: consumeError } = await adminClient
+    .rpc("consume_company_invite", { p_invite_code: code, p_user_id: userId })
+    .maybeSingle<{ status: string; company_id: string | null }>();
+
+  if (consumeError || !consumed) {
+    return { success: false, message: "No se pudo validar el código. Intenta de nuevo." };
   }
 
-  if (!invite) {
-    return { success: false, message: "El código no es válido o ya fue utilizado." };
-  }
-
-  let userId: string;
-  let isNewUser = false;
-
-  if (existingUser) {
-    userId = existingUser.id;
-  } else {
-    // Crear usuario desde cookie de signup pendiente (envía correo de confirmación)
-    const pendingRaw = cookieStore.get("pending_signup")?.value;
-    if (!pendingRaw) redirect("/auth/sign-up");
-
-    const pending = parsePendingSignup(pendingRaw);
-    if (!pending) redirect("/auth/sign-up");
-
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: pending.em,
-      password: pending.pw,
-      options: {
-        data: { full_name: pending.fn, username: pending.un, phone: pending.ph },
-      },
-    });
-
-    if (signUpError || !signUpData.user) {
-      return { success: false, message: signUpError?.message || "No se pudo crear el usuario." };
-    }
-
-    userId = signUpData.user.id;
-    isNewUser = true;
-
-    const { error: profileError } = await adminClient.from("profiles").upsert(
-      { id: userId, full_name: pending.fn, email: pending.em, username: pending.un, phone: pending.ph },
-      { onConflict: "id" }
-    );
-
-    if (profileError) {
-      await adminClient.auth.admin.deleteUser(userId);
-      return { success: false, message: "No se pudo guardar el perfil." };
-    }
-  }
-
-  // Verificar que el usuario no sea ya miembro
-  const { data: existingMembership } = await adminClient
-    .from("memberships")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("company_id", invite.company_id)
-    .maybeSingle();
-
-  if (existingMembership) {
-    if (isNewUser) await adminClient.auth.admin.deleteUser(userId);
+  if (consumed.status === "already_member") {
     return { success: false, message: "Ya perteneces a este negocio." };
   }
 
-  const validRoles = ["owner", "admin", "seller"];
-  const role = validRoles.includes(invite.role ?? "") ? (invite.role as string) : "seller";
-
-  // Crear membership
-  const { error: membershipError } = await adminClient.from("memberships").insert({
-    company_id: invite.company_id,
-    user_id: userId,
-    role,
-  });
-
-  if (membershipError) {
-    if (isNewUser) await adminClient.auth.admin.deleteUser(userId);
-    return { success: false, message: membershipError.message ?? "No se pudo crear el acceso." };
+  if (consumed.status !== "joined" || !consumed.company_id) {
+    return { success: false, message: "El código no es válido o ya fue utilizado." };
   }
 
-  // Marcar invite como usada
-  await adminClient
-    .from("company_invites")
-    .update({ used_by: userId, used_at: new Date().toISOString(), is_active: false })
-    .eq("id", invite.id);
+  const invite = { company_id: consumed.company_id };
 
-  if (isNewUser) {
-    cookieStore.delete("pending_signup");
+  cookieStore.delete(PENDING_SIGNUP_DELETE_OPTIONS);
+
+  if (fromPendingSignup) {
     return { success: true, message: "", requiresConfirmation: true };
   }
 
@@ -333,7 +268,8 @@ export async function selectPlan(formData: FormData): Promise<void> {
     .maybeSingle();
   const keepsPaidPlan = ["active", "paid"].includes(company?.subscription_status ?? "");
 
-  await supabase
+  // Campos de suscripción protegidos por privilegios de columna: solo service_role.
+  await createAdminClient()
     .from("companies")
     .update({
       ...(!keepsPaidPlan ? { subscription_plan: plan } : {}),

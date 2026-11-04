@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
+import { lockBodyScroll, useModalAccessibility } from "../../../components/modal-accessibility";
 import { createPortal } from "react-dom";
 import { createClosure } from "./actions";
 import { SubmitButton } from "../../../components/submit-button";
@@ -43,16 +44,12 @@ export function CreateClosureModal() {
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
+    return lockBodyScroll();
   }, [open]);
+
+  // Foco, Tab confinado, Escape y retorno de foco al disparador
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose: () => setOpen(false) });
 
   const periodLabel = {
     3: "3 meses (trimestral)",
@@ -72,13 +69,18 @@ export function CreateClosureModal() {
             />
             <div className="absolute inset-0 overflow-y-auto overscroll-contain p-4">
               <div className="flex min-h-full items-center justify-center">
-                <div className="relative my-4 w-full max-w-lg rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-800 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+                <div
+                  ref={panelRef}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby={titleId}
+                  className="relative my-4 w-full max-w-lg rounded-[28px] border border-slate-200/80 bg-white p-5 outline-none shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-slate-800 dark:bg-slate-900 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-medium text-sky-700 dark:text-cyan-300">
                         Nuevo cierre
                       </p>
-                      <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                      <h2 id={titleId} className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
                         Iniciar cierre del período
                       </h2>
                       <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">

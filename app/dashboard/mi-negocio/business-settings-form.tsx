@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState, useTransition, useEffect, type ReactNode } from "react";
+import { useActionState, useId, useState, useTransition, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import {
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { ThemeSelector } from "../../../components/theme-selector";
 import { ButtonSpinner } from "../../../components/button-spinner";
+import { useModalAccessibility } from "../../../components/modal-accessibility";
 import {
   updateBusinessSettings,
   disableInventory,
@@ -264,6 +265,20 @@ export function BusinessSettingsForm({
   const [isPendingDisable, startDisableTransition] = useTransition();
   const [showPlanLock, setShowPlanLock] = useState(false);
   const [showDestructive, setShowDestructive] = useState(false);
+  // Diálogos de inventario: foco, Tab confinado, Escape y retorno de foco
+  const planLockTitleId = useId();
+  const destructiveTitleId = useId();
+  const destructiveDescriptionId = useId();
+  const planLockPanelRef = useModalAccessibility({
+    open: showPlanLock,
+    onClose: () => setShowPlanLock(false),
+  });
+  const destructivePanelRef = useModalAccessibility({
+    open: showDestructive,
+    onClose: () => setShowDestructive(false),
+    // Mientras se borran los productos no se cierra con Escape
+    closeOnEscape: !isPendingDisable,
+  });
   const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
   const [hasFile, setHasFile] = useState(false);
   const [hiddenWidgets, setHiddenWidgets] = useState<Set<WidgetKey>>(new Set());
@@ -771,14 +786,20 @@ export function BusinessSettingsForm({
                 onClick={() => setShowPlanLock(false)}
                 aria-hidden="true"
               />
-              <div className="app-card-strong relative w-full max-w-sm overflow-hidden rounded-[28px] shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+              <div
+                ref={planLockPanelRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={planLockTitleId}
+                className="app-card-strong relative w-full max-w-sm overflow-hidden rounded-[28px] shadow-[0_24px_80px_rgba(0,0,0,0.28)] outline-none"
+              >
                 <div className="p-6">
                   <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-[14px] bg-amber-500/15">
                     <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-amber-500" aria-hidden="true">
                       <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
-                  <h3 className="text-base font-semibold tracking-[-0.02em] text-app">
+                  <h3 id={planLockTitleId} className="text-base font-semibold tracking-[-0.02em] text-app">
                     Este plan no incluye inventario
                   </h3>
                   <p className="mt-2 text-sm text-app-soft">
@@ -815,17 +836,24 @@ export function BusinessSettingsForm({
                 onClick={() => setShowDestructive(false)}
                 aria-hidden="true"
               />
-              <div className="app-card-strong relative w-full max-w-sm overflow-hidden rounded-[28px] shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+              <div
+                ref={destructivePanelRef}
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby={destructiveTitleId}
+                aria-describedby={destructiveDescriptionId}
+                className="app-card-strong relative w-full max-w-sm overflow-hidden rounded-[28px] shadow-[0_24px_80px_rgba(0,0,0,0.28)] outline-none"
+              >
                 <div className="p-6">
                   <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-[14px] bg-red-500/10">
                     <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-red-500" aria-hidden="true">
                       <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
-                  <h3 className="text-base font-semibold tracking-[-0.02em] text-app">
+                  <h3 id={destructiveTitleId} className="text-base font-semibold tracking-[-0.02em] text-app">
                     Desactivar inventario
                   </h3>
-                  <p className="mt-2 text-sm text-app-soft">
+                  <p id={destructiveDescriptionId} className="mt-2 text-sm text-app-soft">
                     Se eliminarán <strong className="font-medium text-red-600 dark:text-red-400">todos los productos</strong> de tu negocio. Esta acción no se puede deshacer.
                   </p>
                   <div className="mt-5 flex gap-2">

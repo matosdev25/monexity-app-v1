@@ -203,6 +203,49 @@ export function SignUpForm() {
         </div>
 
         <div className="mt-6">
+          <div className="flex items-start gap-3">
+            <input
+              id="acceptLegal"
+              name="acceptLegal"
+              type="checkbox"
+              value="yes"
+              required
+              aria-invalid={state.fieldErrors?.acceptLegal ? true : undefined}
+              aria-describedby={state.fieldErrors?.acceptLegal ? "acceptLegal-error" : undefined}
+              className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded-md border-slate-300 accent-sky-600 transition-[opacity,transform,box-shadow] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:opacity-85 active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 focus-visible:ring-offset-2 motion-reduce:transition-none dark:border-slate-600 dark:accent-sky-500 dark:focus-visible:ring-offset-slate-900"
+            />
+            <label htmlFor="acceptLegal" className="text-sm leading-6 text-slate-600 dark:text-slate-300">
+              He leído y acepto los{" "}
+              <a
+                href="/legal/terminos"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-sky-700 underline underline-offset-2 transition-[color,opacity] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:text-sky-800 active:text-sky-900 active:opacity-80 focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 motion-reduce:transition-none dark:text-sky-400 dark:hover:text-sky-300 dark:active:text-sky-200"
+              >
+                Términos de uso
+                <span className="sr-only"> (se abre en una pestaña nueva)</span>
+              </a>{" "}
+              y la{" "}
+              <a
+                href="/legal/privacidad"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-sky-700 underline underline-offset-2 transition-[color,opacity] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:text-sky-800 active:text-sky-900 active:opacity-80 focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 motion-reduce:transition-none dark:text-sky-400 dark:hover:text-sky-300 dark:active:text-sky-200"
+              >
+                Política de privacidad
+                <span className="sr-only"> (se abre en una pestaña nueva)</span>
+              </a>
+              .
+            </label>
+          </div>
+          {state.fieldErrors?.acceptLegal && (
+            <p id="acceptLegal-error" className={errorTextClass}>
+              {state.fieldErrors.acceptLegal}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-6">
           <SubmitButton />
         </div>
       </form>

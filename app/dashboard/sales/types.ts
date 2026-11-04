@@ -26,6 +26,8 @@ export type Sale = {
   customer_company: Nullable<string>;
   customer_email: Nullable<string>;
   customer_phone: Nullable<string>;
+  customer_ruc?: Nullable<string>;
+  customer_dv?: Nullable<string>;
   amount: MoneyValue;
   discount_amount: MoneyValue;
   paid_amount: MoneyValue;

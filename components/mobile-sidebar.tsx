@@ -9,6 +9,7 @@ import { ThemeSelector } from "@/components/theme-selector";
 import { LogoutButton } from "@/components/logout-button";
 import { CompanySwitcher } from "@/components/company-switcher";
 import { useNavigation } from "@/components/navigation-context";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import type { CompanyOption } from "@/app/dashboard/layout";
 
 // ── Icons ─────────────────────────────────────────────────────────────
@@ -186,17 +187,11 @@ export function MobileSidebar({
   // Bloquea scroll del body
   useEffect(() => {
     if (!open) return;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    return lockBodyScroll();
   }, [open]);
 
-  // Cierra con Escape
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  // Foco, Tab confinado, Escape y retorno de foco al botón del menú
+  const panelRef = useModalAccessibility({ open, onClose: () => setOpen(false) });
 
   const portal = open
     ? createPortal(
@@ -218,10 +213,12 @@ export function MobileSidebar({
 
           {/* Drawer — superficie sólida para separación visual clara */}
           <div
+            ref={panelRef}
             role="dialog"
             aria-modal="true"
             aria-label="Menú de navegación"
             style={{
+              outline: "none",
               position: "fixed",
               top: "8px",
               bottom: "8px",

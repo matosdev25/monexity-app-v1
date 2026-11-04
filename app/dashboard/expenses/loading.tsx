@@ -1,5 +1,5 @@
-import { PageLoader } from "@/components/page-loader";
+import { ExpensesPageSkeleton } from "@/components/page-skeletons";
 
 export default function ExpensesLoading() {
-  return <PageLoader />;
+  return <ExpensesPageSkeleton />;
 }

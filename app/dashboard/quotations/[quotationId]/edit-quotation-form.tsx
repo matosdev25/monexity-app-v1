@@ -319,6 +319,10 @@ export function EditQuotationForm({
       ? String(Number(quotation.discount_amount))
       : "")
   );
+  // Impuesto en monto: se conserva el guardado (antes se enviaba 0 y se borraba al editar)
+  const [taxValue, setTaxValue] = useState(
+    () => (quotation.tax_amount && Number(quotation.tax_amount) > 0 ? String(Number(quotation.tax_amount)) : "")
+  );
 
   useEffect(() => {
     if (!state.success) return;
@@ -342,7 +346,8 @@ export function EditQuotationForm({
 
   const subtotal = useMemo(
     () => roundMoney(rows.reduce((sum, row) => {
-      const qty = parseMoney(row.quantity) || 1;
+      // Misma regla que el servidor: vacío → 1; 0 o inválido no se convierte en 1
+      const qty = row.quantity.trim() === "" ? 1 : parseMoney(row.quantity);
       return sum + qty * parseMoney(row.unit_price);
     }, 0)),
     [rows]
@@ -353,7 +358,9 @@ export function EditQuotationForm({
     if (discountType === "%") return roundMoney(Math.min(100, Math.max(0, v)) * subtotal / 100);
     return roundMoney(Math.max(0, v));
   }, [discountType, discountValue, subtotal]);
-  const total = useMemo(() => roundMoney(Math.max(0, subtotal - discountAmt)), [subtotal, discountAmt]);
+  const taxAmt = roundMoney(Math.max(0, parseMoney(taxValue)));
+  // Misma regla que el servidor: total = subtotal − descuento + impuesto (mínimo 0)
+  const total = useMemo(() => roundMoney(Math.max(0, subtotal - discountAmt + taxAmt)), [subtotal, discountAmt, taxAmt]);
 
   function updateRow(index: number, updates: Partial<ItemRow>) {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...updates } : row)));
@@ -604,7 +611,6 @@ export function EditQuotationForm({
                   className="w-20 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-right text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-sky-200 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-cyan-400"
                 />
                 <input type="hidden" name="discountAmount" value={String(discountAmt)} />
-                <input type="hidden" name="taxAmount" value="0" />
               </div>
             </div>
             {discountAmt > 0 ? (
@@ -613,6 +619,19 @@ export function EditQuotationForm({
                 {discountType === "%" ? ` (${discountValue}%)` : ""}
               </p>
             ) : null}
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="edit-quotation-tax" className="text-sm text-slate-500 dark:text-slate-400">Impuesto ($)</label>
+              <input
+                id="edit-quotation-tax"
+                type="text"
+                inputMode="decimal"
+                value={taxValue}
+                onChange={(e) => setTaxValue(sanitizeNumeric(e.target.value, 2))}
+                placeholder="0.00"
+                className="w-24 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-right text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-sky-200 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-cyan-400"
+              />
+              <input type="hidden" name="taxAmount" value={String(taxAmt)} />
+            </div>
             <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-2 dark:border-slate-700">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Total</span>
               <span className="text-base font-semibold text-slate-950 dark:text-slate-50">{formatCurrency(total)}</span>

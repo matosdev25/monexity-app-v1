@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/expire-intents",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/purge-unconfirmed-signups",
+      "schedule": "30 8 * * *"
     }
   ]
 }

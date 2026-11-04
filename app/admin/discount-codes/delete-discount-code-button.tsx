@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useId, useRef, useState } from "react";
+import { useModalAccessibility } from "@/components/modal-accessibility";
 import { deleteDiscountCode } from "../actions";
 
 const initialState = { success: false, message: "" };
@@ -9,6 +10,10 @@ export function DeleteDiscountCodeButton({ codeId }: { codeId: string }) {
   const [state, formAction, pending] = useActionState(deleteDiscountCode, initialState);
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  // Foco inicial en "Cancelar", Tab confinado, Escape y retorno al disparador
+  const titleId = useId();
+  const descriptionId = useId();
+  const panelRef = useModalAccessibility({ open, onClose: () => setOpen(false) });
 
   return (
     <>
@@ -38,15 +43,21 @@ export function DeleteDiscountCodeButton({ codeId }: { codeId: string }) {
             className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
-          <div className="relative w-full max-w-115 overflow-hidden rounded-[28px] border border-app bg-[rgba(255,255,255,0.92)] text-app shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:bg-[rgba(15,23,42,0.92)] dark:text-white">
+          <div
+            ref={panelRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={descriptionId}
+            className="relative w-full max-w-115 overflow-hidden rounded-[28px] border border-app bg-[rgba(255,255,255,0.92)] text-app outline-none shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:bg-[rgba(15,23,42,0.92)] dark:text-white">
             <div className="rounded-[28px] border border-app bg-app-panel p-5">
               <p className="text-[11px] uppercase tracking-[0.18em] text-rose-500/80 dark:text-rose-300/80">
                 Confirmación
               </p>
-              <h3 className="mt-1 text-xl font-semibold tracking-tight text-app">
+              <h3 id={titleId} className="mt-1 text-xl font-semibold tracking-tight text-app">
                 Eliminar código
               </h3>
-              <p className="mt-3 text-sm leading-6 text-app-muted">
+              <p id={descriptionId} className="mt-3 text-sm leading-6 text-app-muted">
                 ¿Seguro que deseas eliminar este código? Esta acción no se puede deshacer.
               </p>
               <div className="mt-5 flex justify-end gap-3">

@@ -189,6 +189,15 @@ async function getNextInvoiceNumber(
   });
 }
 
+type RpcError = { code?: string; message?: string } | null;
+
+// Solo los mensajes de validación/permiso de las RPC se muestran al usuario
+function getQuotationRpcErrorMessage(error: RpcError, fallback: string) {
+  if (!error) return fallback;
+  if ((error.code === "22023" || error.code === "42501") && error.message) return error.message;
+  return fallback;
+}
+
 function canManageQuotations(role: string | null | undefined) {
   return ["owner", "admin"].includes(String(role ?? "").toLowerCase());
 }
@@ -230,7 +239,8 @@ function parseItemsFromFormData(
     if (!description)
       return { error: `El ítem ${i + 1} necesita descripción.` };
 
-    const quantity = parseMoney(qtyRaw) || 1;
+    // Vacío → 1 por defecto; 0, negativos o texto inválido se rechazan abajo
+    const quantity = qtyRaw === "" ? 1 : parseMoney(qtyRaw);
     const unit_price = parseMoney(priceRaw);
     const line_total = roundMoney(quantity * unit_price);
 
@@ -382,17 +392,6 @@ export async function updateQuotation(
   const quotationId = getString(formData, "quotationId");
   if (!quotationId) return fail("Cotización no encontrada.");
 
-  const { data: existing } = await ctx.supabase
-    .from("quotations")
-    .select("id, status")
-    .eq("id", quotationId)
-    .eq("company_id", ctx.companyId)
-    .maybeSingle();
-
-  if (!existing) return fail("Cotización no encontrada.");
-  if (existing.status === "converted")
-    return fail("No se puede editar una cotización ya convertida a venta.");
-
   const customerName = getString(formData, "customerName");
   const customerEmail = getString(formData, "customerEmail");
   const customerPhone = getString(formData, "customerPhone");
@@ -418,51 +417,29 @@ export async function updateQuotation(
 
   const discount = roundMoney(Math.max(0, parseMoney(discountRaw)));
   const tax = roundMoney(Math.max(0, parseMoney(taxRaw)));
-  const total = roundMoney(
-    Math.max(0, parsedItems.subtotal - discount + tax)
-  );
 
-  const { error: updateError } = await ctx.supabase
-    .from("quotations")
-    .update({
+  // Cabecera + ítems en una sola transacción (bloquea la fila y rechaza convertidas).
+  // Subtotal y total se recalculan en la base con la misma regla.
+  const { error: updateError } = await ctx.supabase.rpc("update_quotation_atomic", {
+    p_company_id: ctx.companyId,
+    p_quotation_id: quotationId,
+    p_quotation: {
       customer_name: customerName || null,
       customer_email: customerEmail || null,
       customer_phone: customerPhone || null,
       customer_company: customerCompany || null,
       issue_date: issueDate,
       valid_until: validUntil || null,
-      subtotal: parsedItems.subtotal,
       discount_amount: discount,
       tax_amount: tax,
-      total,
       notes: notes || null,
       terms: terms || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", quotationId)
-    .eq("company_id", ctx.companyId);
+    },
+    p_items: parsedItems.items,
+  });
 
   if (updateError)
-    return fail(updateError.message ?? "No se pudo actualizar la cotización.");
-
-  await ctx.supabase
-    .from("quotation_items")
-    .delete()
-    .eq("quotation_id", quotationId)
-    .eq("company_id", ctx.companyId);
-
-  const { error: itemsError } = await ctx.supabase
-    .from("quotation_items")
-    .insert(
-      parsedItems.items.map((item) => ({
-        quotation_id: quotationId,
-        company_id: ctx.companyId,
-        ...item,
-      }))
-    );
-
-  if (itemsError)
-    return fail(itemsError.message ?? "No se pudieron actualizar los ítems.");
+    return fail(getQuotationRpcErrorMessage(updateError, "No se pudo actualizar la cotización."));
 
   revalidateQuotationsPages();
   revalidatePath(`/dashboard/quotations/${quotationId}`);
@@ -527,44 +504,10 @@ export async function convertQuotationToSale(
 
   if (!quotationId) return fail("Cotización no encontrada.");
 
-  const { data: quotation } = await ctx.supabase
-    .from("quotations")
-    .select("*")
-    .eq("id", quotationId)
-    .eq("company_id", ctx.companyId)
-    .maybeSingle();
-
-  if (!quotation) return fail("Cotización no encontrada.");
-  if (quotation.status === "converted")
-    return fail("Esta cotización ya fue convertida a venta.");
-
-  const { data: quotationItems } = await ctx.supabase
-    .from("quotation_items")
-    .select("description, quantity, unit_price, sort_order")
-    .eq("quotation_id", quotationId)
-    .eq("company_id", ctx.companyId)
-    .order("sort_order", { ascending: true });
-
-  let invoiceNumber = "";
-  const total = Number(quotation.total ?? 0);
-  const discountAmount = roundMoney(Math.max(0, Number(quotation.discount_amount ?? 0)));
-  const customerPhone =
-    (quotation.customer_phone as string | null) ??
-    getString(formData, "customerPhone") ??
-    null;
-
-  const saleItems = (quotationItems ?? []).map((item, i) => ({
-    company_id: ctx.companyId as string,
-    description: item.description,
-    quantity: item.quantity,
-    unit_price: item.unit_price,
-    sort_order: item.sort_order ?? i,
-  }));
-
-  let saleId: string;
+  let plan: Record<string, unknown> | null = null;
 
   if (paymentType === "installment") {
-    // ── Plan de cuotas ──────────────────────────────────────────────────────
+    // ── Plan de cuotas (lo crea la RPC; aquí solo se valida el formulario) ──
     const frequency = getString(formData, "frequency").toLowerCase();
     if (!ALLOWED_INSTALLMENT_FREQUENCIES.includes(frequency as typeof ALLOWED_INSTALLMENT_FREQUENCIES[number]))
       return fail("Selecciona una frecuencia válida para el plan.");
@@ -573,149 +516,69 @@ export async function convertQuotationToSale(
     const installmentAmount = parseMoney(getString(formData, "installmentAmount"));
     const installmentsCount = Math.floor(Math.abs(Number(getString(formData, "installmentsCount"))));
     const startDate = getString(formData, "startDate");
-    const planName = getString(formData, "planName") || null;
-    const planNotes = getString(formData, "planNotes") || null;
 
     if (installmentAmount <= 0) return fail("El monto de la cuota no es válido.");
     if (installmentsCount <= 0) return fail("El número de cuotas no es válido.");
     if (!startDate) return fail("La fecha de inicio del plan es requerida.");
-    if (downPaymentAmount > total) return fail("El abono inicial no puede superar el total.");
+    // Abono > total lo rechaza la RPC con el total vigente de la cotización
 
-    const { data: rpcData, error: rpcError } = await ctx.supabase.rpc("create_sale_with_plan", {
+    plan = {
+      down_payment_amount: downPaymentAmount,
+      plan_name: getString(formData, "planName") || null,
+      frequency,
+      installment_amount: installmentAmount,
+      installments_count: installmentsCount,
+      start_date: startDate,
+      plan_notes: getString(formData, "planNotes") || null,
+    };
+  } else if (paymentType !== "full") {
+    return fail("Tipo de pago no válido.");
+  }
+
+  // Venta, ítems, plan y marca de convertida en una sola transacción. La cotización
+  // es la clave de idempotencia: si ya fue convertida, devuelve la misma venta.
+  // Solo se reintenta ante colisión del número de factura (todo se revierte).
+  let rpcError: RpcError = null;
+  let saleId = "";
+
+  for (let attempt = 0; attempt < DOCUMENT_NUMBER_RETRIES; attempt += 1) {
+    let invoiceNumber: string;
+    try {
+      invoiceNumber = await getNextInvoiceNumber(ctx, attempt);
+    } catch {
+      return fail("No se pudo generar el número del documento. Intenta nuevamente.");
+    }
+
+    const { data, error } = await ctx.supabase.rpc("convert_quotation_to_sale_atomic", {
       p_company_id: ctx.companyId,
-      p_created_by: ctx.userId,
-      p_customer_name: quotation.customer_name ?? null,
-      p_customer_email: quotation.customer_email ?? null,
-      p_customer_phone: customerPhone,
-      p_amount: total,
-      p_payment_method: paymentMethod,
-      p_payment_type: "installment",
-      p_sale_date: quotation.issue_date,
-      p_payment_date: quotation.issue_date,
-      p_note: quotation.notes ?? null,
-      p_invoice_notes: quotation.notes ?? null,
-      p_down_payment_amount: downPaymentAmount,
-      p_plan_name: planName,
-      p_frequency: frequency,
-      p_installment_amount: installmentAmount,
-      p_installments_count: installmentsCount,
-      p_start_date: startDate,
-      p_plan_notes: planNotes,
+      p_quotation_id: quotationId,
+      p_invoice_number: invoiceNumber,
+      p_payment: {
+        payment_type: paymentType,
+        payment_method: paymentMethod,
+        customer_phone: getString(formData, "customerPhone") || null,
+        plan,
+      },
     });
 
-    if (rpcError) return fail(rpcError.message ?? "No se pudo crear la venta con plan.");
-
-    const rpcResult = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-    saleId =
-      rpcResult && typeof rpcResult === "object" && "sale_id" in rpcResult
-        ? String(rpcResult.sale_id)
-        : "";
-
-    if (!saleId) return fail("La venta se creó sin devolver un identificador válido.");
-
-    let invoiceAssigned = false;
-    for (let attempt = 0; attempt < DOCUMENT_NUMBER_RETRIES; attempt += 1) {
-      invoiceNumber = await getNextInvoiceNumber(ctx, attempt);
-      const { error: updateNumberError } = await ctx.supabase
-        .from("sales")
-        .update({
-          invoice_number: invoiceNumber,
-          customer_company: quotation.customer_company ?? null,
-          discount_amount: discountAmount,
-        })
-        .eq("id", saleId)
-        .eq("company_id", ctx.companyId);
-
-      if (!updateNumberError) {
-        invoiceAssigned = true;
-        break;
-      }
-
-      if (!isDuplicateDocumentNumberError(updateNumberError)) break;
+    rpcError = error;
+    if (!error) {
+      const row = (Array.isArray(data) ? data[0] : data) as { sale_id?: string } | null;
+      saleId = row?.sale_id ? String(row.sale_id) : "";
+      break;
     }
-
-    if (!invoiceAssigned) {
-      await ctx.supabase
-        .from("sales")
-        .delete()
-        .eq("id", saleId)
-        .eq("company_id", ctx.companyId);
-      return fail("No se pudo generar el número del documento. Intenta nuevamente.");
-    }
-  } else {
-    // ── Pago completo ───────────────────────────────────────────────────────
-    let insertedSale: { id: string } | null = null;
-    let saleError: { code?: string; message?: string } | null = null;
-
-    for (let attempt = 0; attempt < DOCUMENT_NUMBER_RETRIES; attempt += 1) {
-      invoiceNumber = await getNextInvoiceNumber(ctx, attempt);
-      const { data, error } = await ctx.supabase
-        .from("sales")
-        .insert({
-          company_id: ctx.companyId,
-          created_by: ctx.userId,
-          customer_name: quotation.customer_name ?? null,
-          customer_company: quotation.customer_company ?? null,
-          customer_email: quotation.customer_email ?? null,
-          customer_phone: customerPhone,
-          amount: total,
-          paid_amount: total,
-          balance_due: 0,
-          discount_amount: discountAmount,
-          payment_status: "paid",
-          has_payment_plan: false,
-          payment_method: paymentMethod,
-          payment_type: "full",
-          sale_date: quotation.issue_date,
-          payment_date: quotation.issue_date,
-          note: quotation.notes ?? null,
-          invoice_notes: quotation.notes ?? null,
-          invoice_number: invoiceNumber,
-        })
-        .select("id")
-        .single();
-
-      insertedSale = data;
-      saleError = error;
-
-      if (!error) break;
-      if (!isDuplicateDocumentNumberError(error)) break;
-    }
-
-    if (saleError || !insertedSale?.id)
-      return fail("No se pudo generar el número del documento. Intenta nuevamente.");
-
-    saleId = insertedSale.id;
+    if (!isDuplicateDocumentNumberError(error)) break;
   }
 
-  // ── Sale items ────────────────────────────────────────────────────────────
-  if (saleItems.length > 0) {
-    const { error: saleItemsError } = await ctx.supabase
-      .from("sale_items")
-      .insert(saleItems.map((item) => ({ ...item, sale_id: saleId })));
-
-    if (saleItemsError) {
-      await ctx.supabase
-        .from("sales")
-        .delete()
-        .eq("id", saleId)
-        .eq("company_id", ctx.companyId);
-      return fail(saleItemsError.message ?? "No se pudieron transferir los ítems.");
-    }
+  if (rpcError) {
+    if (isDuplicateDocumentNumberError(rpcError))
+      return fail("No se pudo generar el número del documento. Intenta nuevamente.");
+    return fail(getQuotationRpcErrorMessage(rpcError, "No se pudo convertir la cotización. Intenta nuevamente."));
   }
-
-  await ctx.supabase
-    .from("quotations")
-    .update({
-      status: "converted",
-      converted_sale_id: saleId,
-      converted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", quotationId)
-    .eq("company_id", ctx.companyId);
+  if (!saleId) return fail("La venta se creó sin devolver un identificador válido.");
 
   revalidateQuotationsPages();
+  revalidatePath(`/dashboard/quotations/${quotationId}`);
   revalidatePath("/dashboard/sales");
   redirect("/dashboard/sales");
 }

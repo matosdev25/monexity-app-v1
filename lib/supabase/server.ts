@@ -19,7 +19,7 @@ export async function createClient() {
             });
           } catch {
             // Ignorar en Server Components si las cookies
-            // se refrescan correctamente desde middleware.
+            // se refrescan correctamente desde proxy.ts.
           }
         },
       },

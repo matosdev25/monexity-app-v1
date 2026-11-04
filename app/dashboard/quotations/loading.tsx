@@ -1,5 +1,5 @@
-import { PageLoader } from "@/components/page-loader";
+import { QuotationsPageSkeleton } from "@/components/page-skeletons";
 
 export default function QuotationsLoading() {
-  return <PageLoader />;
+  return <QuotationsPageSkeleton />;
 }

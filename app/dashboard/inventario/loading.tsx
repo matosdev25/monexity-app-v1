@@ -1,5 +1,5 @@
-import { PageLoader } from "@/components/page-loader";
+import { InventoryPageSkeleton } from "@/components/page-skeletons";
 
 export default function InventarioLoading() {
-  return <PageLoader />;
+  return <InventoryPageSkeleton />;
 }

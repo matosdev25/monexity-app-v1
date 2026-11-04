@@ -5,10 +5,10 @@ import { CreateSaleForm } from "./create-sale-form";
 import { SalesHistoryModal } from "./sales-history-modal";
 import { EditSaleModal } from "./edit-sale-modal";
 import { SaleInvoiceModal } from "./sale-invoice-modal";
-import { ConfirmSubmitButton } from "../../../components/confirm-submit-button";
+import { DeleteSaleForm } from "./delete-sale-form";
 import { RecordPaymentModal } from "./record-payment-modal";
 import { SaleDetailModal } from "./sale-detail-modal";
-import { deleteSale, fetchActivePaymentMethods } from "./actions";
+import { fetchActivePaymentMethods } from "./actions";
 import { fetchActiveProducts } from "../inventario/actions";
 import { fetchActiveServices } from "../mi-negocio/services-actions";
 import { resolveLogoUrl } from "../../../lib/storage/resolve-logo";
@@ -225,6 +225,8 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
         customer_company,
         customer_email,
         customer_phone,
+        customer_ruc,
+        customer_dv,
         amount,
         discount_amount,
         paid_amount,
@@ -450,7 +452,6 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
                 from={from}
                 to={to}
                 company={companyInvoice}
-                deleteSaleAction={deleteSale}
                 paymentMethods={paymentMethods}
                 canEditManualDates={canEditManualDates}
                 canManageRecords={canManageRecords}
@@ -606,16 +607,10 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
                           />
 
                           {canManageRecords && (
-                            <form action={deleteSale}>
-                              <input type="hidden" name="saleId" value={sale.id} />
-                              <ConfirmSubmitButton
-                                label="Eliminar"
-                                title="Eliminar factura"
-                                confirmMessage="Esta acción eliminará la venta y devolverá las existencias al inventario."
-                                confirmLabel="Sí, eliminar"
-                                className="rounded-2xl border border-rose-200/80 bg-rose-50/80 px-4 py-2 text-sm text-rose-600 transition hover:border-rose-300 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-400/25 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/15 dark:hover:text-rose-200"
-                              />
-                            </form>
+                            <DeleteSaleForm
+                              saleId={sale.id}
+                              className="rounded-2xl border border-rose-200/80 bg-rose-50/80 px-4 py-2 text-sm text-rose-600 transition hover:border-rose-300 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-400/25 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/15 dark:hover:text-rose-200"
+                            />
                           )}
                         </div>
                       </div>

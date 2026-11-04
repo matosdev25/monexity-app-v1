@@ -1,21 +1,15 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
+import { useResolvedTheme } from "./theme-clock";
 
 type Props = { compact?: boolean };
 
-const subscribe = () => () => {};
-const getClientSnapshot = () => true;
-const getServerSnapshot = () => false;
-
 export function ThemeToggle({ compact = false }: Props) {
-  const { resolvedTheme, setTheme } = useTheme();
-  const mounted = useSyncExternalStore(
-    subscribe,
-    getClientSnapshot,
-    getServerSnapshot
-  );
+  const { setTheme } = useTheme();
+  // Tema aplicado de verdad (en "auto" next-themes devolvería "auto")
+  const resolvedTheme = useResolvedTheme();
+  const mounted = resolvedTheme !== null;
 
   if (!mounted) {
     if (compact) {

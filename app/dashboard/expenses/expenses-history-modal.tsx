@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState, useDeferredValue, type ReactNode } from "react";
+import { memo, useEffect, useId, useMemo, useState, useDeferredValue, type ReactNode } from "react";
+import { lockBodyScroll, useModalAccessibility } from "@/components/modal-accessibility";
 import { createPortal } from "react-dom";
 import { ConfirmSubmitButton } from "../../../components/confirm-submit-button";
 import { EditExpenseModal } from "./edit-expense-modal";
@@ -207,6 +208,7 @@ const ExpenseHistoryCard = memo(function ExpenseHistoryCard({
               <input type="hidden" name="expenseId" value={expense.id} />
               <ConfirmSubmitButton
                 label="Eliminar"
+                pendingLabel="Eliminando..."
                 title="Eliminar gasto"
                 confirmMessage="¿Seguro que quieres eliminar este gasto? Esta acción no se puede deshacer."
                 confirmLabel="Sí, eliminar"
@@ -253,21 +255,14 @@ export function ExpensesHistoryModal({
   useEffect(() => {
     if (!open) return;
 
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    const scrollContainer = document.querySelector<HTMLElement>("[data-scroll-container]");
-
-    document.addEventListener("keydown", onKeyDown);
-    document.body.style.overflow = "hidden";
-    if (scrollContainer) scrollContainer.style.overflowY = "hidden";
-
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "";
-      if (scrollContainer) scrollContainer.style.overflowY = "";
-    };
+    return lockBodyScroll();
   }, [open]);
 
   const closeModal = () => setOpen(false);
+
+  // Foco, Tab confinado, Escape (solo el diálogo superior) y retorno de foco
+  const titleId = useId();
+  const panelRef = useModalAccessibility({ open, onClose: closeModal });
 
   const handleApplyFilters = () => {
     setAppliedFrom(draftFrom);
@@ -358,7 +353,13 @@ export function ExpensesHistoryModal({
             />
 
             <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-4">
-              <div className={`${panelClass} relative flex h-[92dvh] max-h-[920px] w-full max-w-[calc(100vw-1rem)] flex-col overflow-hidden sm:h-[88vh] sm:max-w-6xl`}>
+              <div
+                ref={panelRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                className={`${panelClass} relative flex h-[92dvh] max-h-[920px] w-full max-w-[calc(100vw-1rem)] flex-col overflow-hidden outline-none sm:h-[88vh] sm:max-w-6xl`}
+              >
 
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                   <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/95 sm:px-5">
@@ -367,7 +368,7 @@ export function ExpensesHistoryModal({
                         <p className="text-sm font-medium text-sky-700 dark:text-cyan-300">
                           Historial completo
                         </p>
-                        <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                        <h2 id={titleId} className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                           Gastos
                         </h2>
                         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
